@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="theme-color" content="#49469D">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Chấm công True Love</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* ====== DÁN URL APPS SCRIPT Ở FILE NÀY, DÒNG CÓ CHỮ API_URL (gần cuối file) ====== */
+:root{
+  --bg:#F4F3F8; --surface:#fff; --surface-2:#EEEDF4; --ink:#1D1A29; --ink-2:#48445C; --muted:#6C6783; --line:#E1DEEA;
+  --grad:linear-gradient(92deg,#238FC0 0%,#49469D 52%,#C5288F 100%);
+  --ok:#177A4B; --ok-bg:#E2F3E9; --late:#B34E0C; --late-bg:#FCEADB;
+  --leave:#2460B0; --leave-bg:#E1EBF9; --wait:#8E650A; --wait-bg:#F7EDD2; --bad:#B42F2C; --bad-bg:#FAE3E2;
+  --sans:"Be Vietnam Pro",system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.55;-webkit-font-smoothing:antialiased}
+.app{max-width:520px;margin:0 auto;min-height:100%;display:flex;flex-direction:column;background:var(--bg)}
+.bar{height:5px;background:var(--grad);flex:none}
+.screen{flex:1;display:none;flex-direction:column;padding:20px 18px calc(20px + env(safe-area-inset-bottom))}
+.screen.on{display:flex}
+h1{font-size:22px;font-weight:800;margin:0 0 4px}
+.sub{color:var(--muted);font-size:14px;margin:0 0 20px}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+label{display:block;font-size:13px;font-weight:600;color:var(--ink-2);margin:14px 0 6px}
+input[type=text],input[type=tel],input[type=password]{
+  width:100%;min-height:54px;border:1.5px solid var(--line);border-radius:14px;background:var(--surface);
+  color:var(--ink);font-family:var(--sans);font-size:17px;padding:0 16px;outline:none}
+input:focus{border-color:#49469D}
+input.pin{font-family:var(--mono);letter-spacing:.5em;text-align:center;font-size:22px}
+.btn{width:100%;min-height:56px;border:0;border-radius:16px;background:var(--grad);color:#fff;font-family:var(--sans);
+  font-weight:700;font-size:17px;display:flex;align-items:center;justify-content:center;gap:10px;cursor:pointer}
+.btn:active{transform:scale(.99)}
+.btn[disabled]{opacity:.5}
+.btn.ghost{background:var(--surface);color:var(--ink);border:1.5px solid var(--line);min-height:50px;font-size:15px}
+.btn.dark{background:var(--ink);color:#fff}
+.msg{margin-top:14px;border-radius:12px;padding:12px 14px;font-size:14px;display:none}
+.msg.on{display:block}
+.msg.err{background:var(--bad-bg);color:var(--bad)}
+.msg.info{background:var(--leave-bg);color:var(--leave)}
+.logo{width:52px;height:52px;border-radius:14px;background:var(--grad);display:grid;place-items:center;margin-bottom:18px}
+.logo svg{width:30px;height:30px}
+.hello{font-size:13px;color:var(--muted)}
+.hello b{display:block;font-size:20px;color:var(--ink);font-weight:700}
+.clock{font-family:var(--mono);font-size:54px;font-weight:700;line-height:1;margin:10px 0 2px;letter-spacing:-.02em}
+.clock-sub{font-size:12px;color:var(--muted);margin-bottom:16px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:14px 16px;margin-bottom:12px}
+.row{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.row+.row{margin-top:6px}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:4px 10px;border-radius:999px}
+.pill::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.pill.ok{background:var(--ok-bg);color:var(--ok)}.pill.late{background:var(--late-bg);color:var(--late)}
+.pill.wait{background:var(--wait-bg);color:var(--wait)}.pill.bad{background:var(--bad-bg);color:var(--bad)}
+.strip{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px;text-align:center}
+.strip div{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:10px 4px;font-size:11px;color:var(--muted)}
+.strip b{display:block;font-family:var(--mono);font-size:20px;color:var(--ink)}
+.spacer{flex:1;min-height:12px}
+.foot{margin-top:14px;text-align:center;font-size:12px;color:var(--muted)}
+.foot a{color:var(--muted)}
+/* camera */
+#s-cam{background:#15121C;color:#fff;padding:0}
+.cam-top{padding:14px 18px;display:flex;justify-content:space-between;align-items:center;font-size:13px}
+.cam-view{flex:1;position:relative;overflow:hidden;background:#000}
+#video,#shot{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+#shot{display:none;background:#000}
+.guide{position:absolute;left:50%;top:12%;width:64%;height:56%;transform:translateX(-50%);
+  border:2px dashed rgba(255,255,255,.65);border-radius:50%;pointer-events:none}
+.cam-hint{position:absolute;left:0;right:0;bottom:12px;text-align:center;font-size:12px;color:rgba(255,255,255,.85)}
+.cam-bot{padding:16px 18px calc(20px + env(safe-area-inset-bottom));display:flex;align-items:center;justify-content:center;gap:14px}
+.shutter{width:74px;height:74px;border-radius:50%;border:5px solid rgba(255,255,255,.35);background:#fff;cursor:pointer}
+.cam-bot .btn{min-height:50px}
+#camFallback{display:none;padding:0 18px 20px}
+/* result */
+#s-kq{padding:0}
+.kq{flex:1;display:flex;flex-direction:column;padding:32px 22px calc(22px + env(safe-area-inset-bottom))}
+.kq .ic{width:68px;height:68px;border-radius:50%;display:grid;place-items:center}
+.kq .ic svg{width:36px;height:36px}
+.kq .t{font-family:var(--mono);font-size:46px;font-weight:700;line-height:1;margin:14px 0 4px}
+.kq h2{font-size:24px;font-weight:800;margin:0 0 10px}
+.kq p{margin:0 0 6px;font-size:15px}
+.kq .note{background:rgba(255,255,255,.6);border-radius:12px;padding:10px 12px;font-size:13.5px;margin-top:8px;color:var(--ink-2)}
+.kq .acts{margin-top:auto;display:grid;gap:10px}
+.load{position:fixed;inset:0;background:rgba(244,243,248,.94);display:none;place-items:center;z-index:50;font-weight:600}
+.load.on{display:grid}
+.spin{width:34px;height:34px;border:3px solid var(--line);border-top-color:#C5288F;border-radius:50%;animation:sp .8s linear infinite;margin:0 auto 12px}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation:none}}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="bar"></div>
+
+  <!-- ĐĂNG NHẬP -->
+  <section class="screen on" id="s-login">
+    <div class="logo"><svg viewBox="0 0 24 24"><path d="M12 20s-7-4.5-7-9.2A4.2 4.2 0 0 1 12 8a4.2 4.2 0 0 1 7 2.8C19 15.5 12 20 12 20z" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"/></svg></div>
+    <h1>Chấm công True Love</h1>
+    <p class="sub">Công ty CP Love Journey</p>
+    <label for="maNV">Mã nhân viên</label>
+    <input type="text" id="maNV" autocomplete="username" autocapitalize="characters" placeholder="VD: TEST01">
+    <label for="pin">Mã PIN</label>
+    <input type="tel" id="pin" class="pin" inputmode="numeric" maxlength="6" autocomplete="current-password" placeholder="••••">
+    <div class="msg err" id="loginErr"></div>
+    <div class="spacer"></div>
+    <button class="btn" id="btnLogin">Vào ca</button>
+    <p class="foot">Quên PIN thì nhắn trưởng bộ phận cấp lại giúp.</p>
+  </section>
+
+  <!-- TRANG CHÍNH -->
+  <section class="screen" id="s-home">
+    <div class="row">
+      <div class="hello"><span id="ngayHomNay">—</span><b id="tenNV">—</b></div>
+      <button class="btn ghost" style="width:auto;min-height:38px;padding:0 14px;font-size:13px" id="btnThoat">Thoát</button>
+    </div>
+    <div class="clock mono" id="dongHo">--:--</div>
+    <div class="clock-sub">Giờ máy chủ · không theo đồng hồ điện thoại</div>
+
+    <div class="card">
+      <div class="row"><b id="caTen">—</b><span class="mono" id="caGio">—</span></div>
+      <div class="row" style="color:var(--muted);font-size:13px"><span>Vị trí</span><span id="viTri">Đang lấy…</span></div>
+    </div>
+
+    <div class="strip">
+      <div><b id="oVao">—</b>chấm vào</div>
+      <div><b id="oRa">—</b>chấm ra</div>
+      <div><b id="oTre">0</b>lần trễ tháng</div>
+    </div>
+
+    <div class="msg info" id="homeMsg"></div>
+    <div class="spacer"></div>
+    <button class="btn" id="btnCham">
+      <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.5" fill="none" stroke="#fff" stroke-width="2"/></svg>
+      <span id="btnChamLabel">Chụp ảnh chấm vào</span>
+    </button>
+    <p class="foot">Ảnh chụp trực tiếp trong app, không chọn được ảnh có sẵn.</p>
+  </section>
+
+  <!-- CAMERA -->
+  <section class="screen" id="s-cam">
+    <div class="cam-top">
+      <span id="camNhan">CHẤM VÀO · chụp trực tiếp</span>
+      <button class="btn ghost" style="width:auto;min-height:34px;padding:0 12px;font-size:13px;background:rgba(255,255,255,.14);color:#fff;border:0" id="btnHuy">Huỷ</button>
+    </div>
+    <div class="cam-view">
+      <video id="video" playsinline muted autoplay></video>
+      <canvas id="shot"></canvas>
+      <div class="guide" id="guide"></div>
+      <div class="cam-hint" id="camHint">Đưa mặt vào khung rồi bấm nút tròn</div>
+    </div>
+    <div class="cam-bot" id="camBot">
+      <button class="shutter" id="btnChup" aria-label="Chụp"></button>
+    </div>
+    <div class="cam-bot" id="camXacNhan" style="display:none">
+      <button class="btn ghost" id="btnChupLai" style="background:rgba(255,255,255,.14);color:#fff;border:0">Chụp lại</button>
+      <button class="btn dark" id="btnGui" style="background:#fff;color:#1D1A29">Gửi</button>
+    </div>
+    <div id="camFallback">
+      <p style="font-size:13px;color:rgba(255,255,255,.8)">Trình duyệt này không mở được camera trong trang. Bấm nút dưới để chụp bằng camera máy (không chọn ảnh có sẵn).</p>
+      <input type="file" id="fileCam" accept="image/*" capture="user" style="display:none">
+      <button class="btn" id="btnFile">Mở camera chụp</button>
+    </div>
+  </section>
+
+  <!-- KẾT QUẢ -->
+  <section class="screen" id="s-kq"><div class="kq" id="kq"></div></section>
+
+  <div class="load" id="load"><div style="text-align:center"><div class="spin"></div><span id="loadTxt">Đang ghi nhận…</span></div></div>
+</div>
+
+<script>
+/*==================================================================
+  DÁN URL ỨNG DỤNG WEB CỦA APPS SCRIPT VÀO ĐÂY (kết thúc bằng /exec)
+==================================================================*/
+var API_URL = 'https://script.google.com/macros/s/AKfycbxqXXR9F1Q2Zxmz8JJyuLU6VlgycgGYOFWY7cm4fcsj2xmBboJqy30GuDW4gvSzU_zANw/exec';
+
+var $ = function(id){ return document.getElementById(id); };
+var S = { token:'', maNV:'', hoTen:'', loai:'VAO', anh:'', viTri:null, lechGio:0, tt:null };
+
+/*=============== TIỆN ÍCH ===============*/
+function man(id){
+  ['s-login','s-home','s-cam','s-kq'].forEach(function(x){ $(x).classList.toggle('on', x===id); });
+  window.scrollTo(0,0);
+}
+function bao(el, text, loai){
+  el.textContent = text || '';
+  el.className = 'msg ' + (loai||'err') + (text ? ' on' : '');
+}
+function tai(on, txt){ $('loadTxt').textContent = txt || 'Đang ghi nhận…'; $('load').classList.toggle('on', !!on); }
+function hai(n){ return (n<10?'0':'') + n; }
+function dur(m){ var h=Math.floor(m/60), r=m%60; return (h? h+' giờ ':'') + (r? r+' phút':'').trim(); }
+function tien(n){ return (Number(n)||0).toLocaleString('vi-VN') + 'đ'; }
+
+function mayId(){
+  var k = localStorage.getItem('cc_device');
+  if (!k) { k = (Math.random().toString(36).slice(2) + Date.now().toString(36)).toUpperCase(); localStorage.setItem('cc_device', k); }
+  return k;
+}
+
+function goi(payload){
+  payload.deviceId = mayId();
+  return fetch(API_URL, {
+    method:'POST', redirect:'follow',
+    headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body: JSON.stringify(payload)
+  }).then(function(r){ return r.json(); });
+}
+
+/*=============== ĐỒNG HỒ ===============*/
+function chayDongHo(){
+  setInterval(function(){
+    var d = new Date(Date.now() + S.lechGio);
+    var el = $('dongHo');
+    if (el) el.textContent = hai(d.getHours()) + ':' + hai(d.getMinutes());
+  }, 1000);
+}
+function gioHienTai(){
+  var d = new Date(Date.now() + S.lechGio);
+  return hai(d.getHours()) + ':' + hai(d.getMinutes()) + ':' + hai(d.getSeconds());
+}
+
+/*=============== VỊ TRÍ ===============*/
+function layViTri(){
+  return new Promise(function(res){
+    if (!navigator.geolocation) { res(null); return; }
+    navigator.geolocation.getCurrentPosition(
+      function(p){ res({lat:p.coords.latitude, lng:p.coords.longitude, acc:Math.round(p.coords.accuracy)}); },
+      function(){ res(null); },
+      {enableHighAccuracy:true, timeout:9000, maximumAge:30000}
+    );
+  });
+}
+
+/*=============== ĐĂNG NHẬP ===============*/
+$('btnLogin').addEventListener('click', function(){
+  var ma = $('maNV').value.trim().toUpperCase(), pin = $('pin').value.trim();
+  if (!ma || !pin) { bao($('loginErr'), 'Nhập đủ mã nhân viên và PIN giúp em.'); return; }
+  tai(true, 'Đang kiểm tra…');
+  goi({action:'login', maNV:ma, pin:pin}).then(function(r){
+    tai(false);
+    if (!r.ok) { bao($('loginErr'), r.loi || 'Đăng nhập không được.'); return; }
+    bao($('loginErr'), '');
+    S.token = r.token; S.maNV = r.maNV; S.hoTen = r.hoTen;
+    localStorage.setItem('cc_token', r.token);
+    localStorage.setItem('cc_manv', r.maNV);
+    $('pin').value = '';
+    veHome(r.trangThai);
+  }).catch(function(e){
+    tai(false); bao($('loginErr'), 'Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại. (' + e + ')');
+  });
+});
+$('pin').addEventListener('keydown', function(e){ if (e.key === 'Enter') $('btnLogin').click(); });
+
+$('btnThoat').addEventListener('click', function(){
+  localStorage.removeItem('cc_token');
+  S.token=''; man('s-login');
+});
+
+/*=============== TRANG CHÍNH ===============*/
+function veHome(tt){
+  S.tt = tt;
+  man('s-home');
+  $('tenNV').textContent = S.hoTen || S.maNV;
+  $('ngayHomNay').textContent = 'Hôm nay ' + (tt.ngay || '').split('-').reverse().join('/');
+  $('caTen').textContent = tt.caDuDoan === 'chieu' ? 'Ca chiều' : 'Ca sáng';
+  $('caGio').textContent = tt.caVao + ' – ' + tt.caRa;
+  $('oVao').textContent = tt.daVao || '—';
+  $('oRa').textContent  = tt.daRa  || '—';
+  $('oTre').textContent = tt.soLanTreThang || 0;
+
+  var xong = tt.daVao && tt.daRa;
+  S.loai = tt.daVao ? 'RA' : 'VAO';
+  $('btnChamLabel').textContent = xong ? 'Hôm nay đã chấm đủ' : (S.loai === 'VAO' ? 'Chụp ảnh chấm vào' : 'Chụp ảnh chấm ra');
+  $('btnCham').disabled = !!xong;
+
+  if (tt.tongQuyThang) bao($('homeMsg'), 'Tháng này bạn có ' + tt.soLanTreThang + ' lần trễ · quỹ ' + tien(tt.tongQuyThang) + '. Nộp quỹ nhớ chụp ảnh gửi thủ quỹ nhé.', 'info');
+  else bao($('homeMsg'), '');
+
+  layViTri().then(function(v){
+    S.viTri = v;
+    $('viTri').textContent = v ? ('Đã lấy · sai số ±' + v.acc + ' m') : 'Không lấy được — vẫn chấm được, quản lý sẽ xác nhận';
+  });
+}
+
+/*=============== CAMERA ===============*/
+var stream = null;
+$('btnCham').addEventListener('click', function(){ moCamera(); });
+$('btnHuy').addEventListener('click', function(){ dongCamera(); man('s-home'); });
+
+function moCamera(){
+  $('camNhan').textContent = (S.loai === 'VAO' ? 'CHẤM VÀO' : 'CHẤM RA') + ' · chụp trực tiếp';
+  $('shot').style.display = 'none'; $('video').style.display = '';
+  $('camBot').style.display = 'flex'; $('camXacNhan').style.display = 'none';
+  $('camFallback').style.display = 'none'; $('guide').style.display = '';
+  man('s-cam');
+  if (!S.viTri) layViTri().then(function(v){ S.viTri = v; });
+
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { duPhong(); return; }
+  navigator.mediaDevices.getUserMedia({video:{facingMode:'user', width:{ideal:1280}}, audio:false})
+    .then(function(st){ stream = st; $('video').srcObject = st; $('video').play(); })
+    .catch(function(){ duPhong(); });
+}
+function duPhong(){
+  $('camBot').style.display = 'none';
+  $('guide').style.display = 'none';
+  $('camHint').textContent = '';
+  $('camFallback').style.display = 'block';
+}
+function dongCamera(){
+  if (stream) { stream.getTracks().forEach(function(t){ t.stop(); }); stream = null; }
+}
+
+$('btnChup').addEventListener('click', function(){
+  var v = $('video');
+  if (!v.videoWidth) { return; }
+  veAnh(v, v.videoWidth, v.videoHeight);
+});
+$('btnFile').addEventListener('click', function(){ $('fileCam').click(); });
+$('fileCam').addEventListener('change', function(e){
+  var f = e.target.files && e.target.files[0]; if (!f) return;
+  var img = new Image();
+  img.onload = function(){ veAnh(img, img.width, img.height); $('camFallback').style.display='none'; };
+  img.src = URL.createObjectURL(f);
+});
+
+function veAnh(nguon, w, h){
+  var c = $('shot'), ctx = c.getContext('2d');
+  var rong = 720, cao = Math.round(h * rong / w);
+  c.width = rong; c.height = cao;
+  ctx.drawImage(nguon, 0, 0, rong, cao);
+
+  // đóng dấu
+  var cao2 = 74;
+  ctx.fillStyle = 'rgba(0,0,0,.58)';
+  ctx.fillRect(0, cao - cao2, rong, cao2);
+  ctx.fillStyle = '#fff';
+  ctx.font = '600 17px "Be Vietnam Pro", Arial, sans-serif';
+  ctx.fillText((S.loai === 'VAO' ? 'CHẤM VÀO' : 'CHẤM RA') + ' · ' + (S.hoTen || '') + ' · ' + S.maNV, 14, cao - cao2 + 25);
+  ctx.font = '500 15px "JetBrains Mono", monospace';
+  var d = new Date(Date.now() + S.lechGio);
+  ctx.fillText(hai(d.getDate()) + '/' + hai(d.getMonth()+1) + '/' + d.getFullYear() + '  ' + gioHienTai(), 14, cao - cao2 + 46);
+  ctx.font = '500 13px "Be Vietnam Pro", Arial, sans-serif';
+  ctx.fillText(S.viTri ? ('GPS ±' + S.viTri.acc + ' m') : 'Không có GPS', 14, cao - cao2 + 65);
+
+  S.anh = c.toDataURL('image/jpeg', 0.72);
+  c.style.display = 'block'; $('video').style.display = 'none';
+  $('guide').style.display = 'none'; $('camHint').textContent = 'Ảnh này sẽ gửi kèm giờ máy chủ';
+  $('camBot').style.display = 'none'; $('camXacNhan').style.display = 'flex';
+  dongCamera();
+}
+
+$('btnChupLai').addEventListener('click', function(){ S.anh=''; moCamera(); });
+
+$('btnGui').addEventListener('click', function(){
+  if (!S.anh) return;
+  tai(true, 'Đang ghi nhận…');
+  var p = {action:'cham', token:S.token, loai:S.loai, anh:S.anh};
+  if (S.viTri) { p.lat = S.viTri.lat; p.lng = S.viTri.lng; p.acc = S.viTri.acc; }
+  goi(p).then(function(r){
+    tai(false);
+    if (!r.ok && r.ma === 'het_phien') { man('s-login'); bao($('loginErr'), 'Phiên hết hạn, đăng nhập lại giúp em.'); return; }
+    if (!r.ok) { alert(r.loi || 'Chưa ghi nhận được, thử lại giúp em.'); return; }
+    S.anh = '';
+    veKetQua(r);
+  }).catch(function(e){
+    tai(false); alert('Gửi không được, kiểm tra mạng rồi bấm Gửi lại. (' + e + ')');
+  });
+});
+
+/*=============== KẾT QUẢ ===============*/
+var ICON = {
+  ok:'<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  late:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="#fff" stroke-width="2.2"/><path d="M12 7.5V12l3 2" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/></svg>',
+  bad:'<svg viewBox="0 0 24 24"><path d="M12 4l9 16H3z" fill="none" stroke="#fff" stroke-width="2.2" stroke-linejoin="round"/><path d="M12 10v4.5M12 17.2v.3" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/></svg>'
+};
+function veKetQua(r){
+  var la = r.loai === 'VAO';
+  var kind = !r.viPham ? 'ok' : (r.lanThu >= 7 ? 'bad' : 'late');
+  var bg = {ok:'var(--ok-bg)', late:'var(--late-bg)', bad:'var(--bad-bg)'}[kind];
+  var fg = {ok:'var(--ok)',    late:'var(--late)',    bad:'var(--bad)'}[kind];
+
+  var tieuDe, dong = [];
+  if (!r.viPham) {
+    if (r.lech > 0) { tieuDe = (la ? 'Trễ ' : 'Về sớm ') + r.lech + ' phút';
+      dong.push('Chưa tới mốc ' + r.nguong + ' phút nên không tính lần nộp quỹ.'); }
+    else { tieuDe = la ? 'Đúng giờ' : 'Đúng giờ ra';
+      dong.push(la ? 'Chúc bạn ca làm vui!' : 'Cảm ơn bạn đã hoàn thành ca làm hôm nay!'); }
+  } else {
+    tieuDe = (la ? 'Trễ ' : 'Về sớm ') + dur(r.lech);
+    dong.push('Lần thứ ' + r.lanThu + ' trong tháng.');
+    dong.push('Nộp Quỹ chung ' + tien(r.tienQuy) + ', không trừ vào lương.');
+  }
+
+  $('kq').style.background = bg;
+  $('kq').innerHTML =
+    '<div class="ic" style="background:' + fg + '">' + ICON[kind] + '</div>' +
+    '<div class="t" style="color:' + fg + '">' + r.gio + '</div>' +
+    '<h2 style="color:' + fg + '">' + tieuDe + '</h2>' +
+    dong.map(function(x){ return '<p>' + x + '</p>'; }).join('') +
+    '<p style="color:var(--muted);font-size:13px;margin-top:8px">' +
+      (r.ca === 'chieu' ? 'Ca chiều' : 'Ca sáng') + ' · mốc ' + r.mocCa +
+      (r.khoangCach !== '' && r.khoangCach !== undefined ? ' · cách văn phòng ' + r.khoangCach + ' m' : '') + '</p>' +
+    (r.ghiChu || []).map(function(n){ return '<div class="note">' + n + '</div>'; }).join('') +
+    '<div class="acts"><button class="btn ghost" id="btnVeHome">Về trang chính</button></div>';
+  man('s-kq');
+  $('btnVeHome').addEventListener('click', function(){ veHome(r.trangThai); });
+}
+
+/*=============== KHỞI ĐỘNG ===============*/
+(function(){
+  if (API_URL.indexOf('DAN_URL') === 0) {
+    bao($('loginErr'), 'Chưa dán URL Apps Script vào file index.html (dòng API_URL).');
+  }
+  $('maNV').value = localStorage.getItem('cc_manv') || '';
+  chayDongHo();
+
+  goi({action:'ping'}).then(function(r){
+    if (r && r.ok) {
+      var mc = new Date(); // ước lượng lệch giờ máy chủ so với điện thoại
+      S.lechGio = r.moc - mc.getTime();
+      var tok = localStorage.getItem('cc_token');
+      if (tok) {
+        S.token = tok;
+        return goi({action:'trangthai', token:tok}).then(function(t){
+          if (t.ok) { S.maNV = t.maNV; S.hoTen = t.hoTen; veHome(t.trangThai); }
+        });
+      }
+    }
+  }).catch(function(){});
+})();
+</script>
+</body>
+</html>

@@ -65,6 +65,8 @@ function caiDatLanDau() {
   taoSheet_(ss, SHEET_CHAMCONG, COT_CHAMCONG);
 
   var shCH = taoSheet_(ss, SHEET_CAUHINH, COT_CAUHINH);
+  // Ép cột GiaTri về dạng chữ để Sheets KHÔNG đổi "09:00" thành kiểu giờ
+  shCH.getRange('B:B').setNumberFormat('@');
   if (shCH.getLastRow() < 2) {
     shCH.getRange(2, 1, CAUHINH_MAC_DINH.length, 3).setValues(CAUHINH_MAC_DINH);
   }
@@ -137,15 +139,26 @@ function taoSheet_(ss, ten, cot) {
 }
 
 /*================= CẤU HÌNH =================*/
+/**
+ * Đọc cấu hình bằng getDisplayValues() — lấy đúng chữ hiện trong ô.
+ * Quan trọng: nếu dùng getValues(), ô giờ "09:00" bị Sheets trả về dạng
+ * Date (Sat Dec 30 1899 09:00:00) làm mọi phép tính giờ sai.
+ */
 function docCauHinh_() {
   var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_CAUHINH);
   var out = {};
   if (!sh || sh.getLastRow() < 2) return out;
-  var v = sh.getRange(2, 1, sh.getLastRow() - 1, 2).getValues();
+  var v = sh.getRange(2, 1, sh.getLastRow() - 1, 2).getDisplayValues();
   for (var i = 0; i < v.length; i++) {
     if (v[i][0]) out[String(v[i][0]).trim()] = String(v[i][1]).trim();
   }
   return out;
+}
+
+/** Đổi giá trị cấu hình sang số, bỏ dấu phẩy/khoảng trắng nếu ô bị format */
+function so_(v, macDinh) {
+  var n = parseFloat(String(v === undefined || v === null ? '' : v).replace(/[^0-9.\-]/g, ''));
+  return isNaN(n) ? macDinh : n;
 }
 
 function ghiCauHinh_(khoa, giaTri) {
@@ -163,9 +176,15 @@ function json_(obj) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
+/** Đọc "09:00", "9:00", "9:00:00 PM", "21:00" -> số phút trong ngày */
 function phutTuChuoi_(hhmm) {
-  var p = String(hhmm || '').split(':');
-  return (parseInt(p[0], 10) || 0) * 60 + (parseInt(p[1], 10) || 0);
+  var s = String(hhmm === undefined || hhmm === null ? '' : hhmm).trim();
+  var m = s.match(/(\d{1,2})\s*:\s*(\d{1,2})/);
+  if (!m) return 0;
+  var h = parseInt(m[1], 10) || 0, p = parseInt(m[2], 10) || 0;
+  if (/pm|ch\b/i.test(s) && h < 12) h += 12;   // 9:00 PM -> 21:00
+  if (/am|sa\b/i.test(s) && h === 12) h = 0;   // 12:00 AM -> 00:00
+  return h * 60 + p;
 }
 
 function hhmm_(phut) {
@@ -413,8 +432,8 @@ function cham_(req) {
   var mocVao = phutTuChuoi_(ca === 'sang' ? c.ca_sang_vao : c.ca_chieu_vao);
   var mocRa  = phutTuChuoi_(ca === 'sang' ? c.ca_sang_ra  : c.ca_chieu_ra);
 
-  var nguong   = Number(c.nguong_tre_phut) || 10;
-  var nguongBu = Number(c.nguong_bu_phut) || 30;
+  var nguong   = so_(c.nguong_tre_phut, 10);
+  var nguongBu = so_(c.nguong_bu_phut, 30);
   var phutTre = 0, phutSom = 0;
   if (loai === 'VAO') phutTre = Math.max(0, phutHienTai - mocVao);
   else                phutSom = Math.max(0, mocRa - phutHienTai);
@@ -425,8 +444,8 @@ function cham_(req) {
   var sai = Number(req.acc) || 0;
   if (req.lat && req.lng && c.office_lat && c.office_lng) {
     toaDo = Number(req.lat).toFixed(6) + ', ' + Number(req.lng).toFixed(6);
-    khoangCach = khoangCachMet_(Number(c.office_lat), Number(c.office_lng), Number(req.lat), Number(req.lng));
-    ngoaiVung = khoangCach > (Number(c.ban_kinh_m) || 150) || sai > (Number(c.gps_sai_so_toi_da) || 200);
+    khoangCach = khoangCachMet_(so_(c.office_lat, 0), so_(c.office_lng, 0), Number(req.lat), Number(req.lng));
+    ngoaiVung = khoangCach > so_(c.ban_kinh_m, 150) || sai > so_(c.gps_sai_so_toi_da, 200);
   } else {
     ngoaiVung = true;
   }
@@ -437,7 +456,7 @@ function cham_(req) {
   if (viPham) {
     var thang = demViPhamThang_(nv.maNV, Utilities.formatDate(now, TZ, 'yyyy-MM'));
     lanThu  = thang.soLan + 1;
-    tienQuy = lanThu <= 3 ? (Number(c.muc_quy_lan_1_3) || 10000) : (Number(c.muc_quy_tu_lan_4) || 50000);
+    tienQuy = lanThu <= 3 ? so_(c.muc_quy_lan_1_3, 10000) : so_(c.muc_quy_tu_lan_4, 50000);
     if (lanThu === 3) ghiChu.push('Lần thứ 3 trong tháng: trưởng bộ phận nhắc nhở trực tiếp.');
     if (lanThu >= 7) ghiChu.push('Quá 6 lần trong tháng: báo sếp xem xét kỷ luật.');
     if (lech > nguongBu) ghiChu.push('Quá ' + nguongBu + ' phút: phải làm bù ' + lech + ' phút, đăng ký ngày bù với trưởng bộ phận.');
