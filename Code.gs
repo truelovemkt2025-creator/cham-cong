@@ -62,7 +62,11 @@ function onOpen() {
 function caiDatLanDau() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   taoSheet_(ss, SHEET_NHANSU, COT_NHANSU);
-  taoSheet_(ss, SHEET_CHAMCONG, COT_CHAMCONG);
+  var shCC = taoSheet_(ss, SHEET_CHAMCONG, COT_CHAMCONG);
+  // Ép cột Ngày (A) và Giờ (F) về dạng chữ, nếu không Sheets đổi sang kiểu ngày/giờ
+  // làm việc đếm vi phạm trong tháng và kiểm tra "hôm nay đã chấm chưa" bị sai.
+  shCC.getRange('A:A').setNumberFormat('@');
+  shCC.getRange('F:F').setNumberFormat('@');
 
   var shCH = taoSheet_(ss, SHEET_CAUHINH, COT_CAUHINH);
   // Ép cột GiaTri về dạng chữ để Sheets KHÔNG đổi "09:00" thành kiểu giờ
@@ -211,6 +215,26 @@ function tenThu_(d) {
   return ['CN','T2','T3','T4','T5','T6','T7'][Number(Utilities.formatDate(d, TZ, 'u')) % 7];
 }
 
+/**
+ * Đưa ô Ngày về chuỗi yyyy-MM-dd dù Sheets lưu dạng chữ hay dạng ngày tháng.
+ * Thiếu hàm này thì đếm vi phạm trong tháng luôn ra 0 và không biết hôm nay đã chấm chưa.
+ */
+function ngayChuoi_(v) {
+  if (v instanceof Date) return Utilities.formatDate(v, TZ, 'yyyy-MM-dd');
+  var s = String(v === undefined || v === null ? '' : v).trim();
+  var m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return m[1] + '-' + m[2] + '-' + m[3];
+  m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);   // 12/09/2026
+  if (m) return m[3] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2);
+  return s;
+}
+
+/** Đưa ô Giờ về chuỗi HH:mm dù Sheets lưu dạng chữ hay dạng giờ */
+function gioChuoi_(v) {
+  if (v instanceof Date) return Utilities.formatDate(v, TZ, 'HH:mm');
+  return hhmm_(phutTuChuoi_(v));
+}
+
 function timNhanVien_(maNV) {
   var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NHANSU);
   if (!sh || sh.getLastRow() < 2) return null;
@@ -241,8 +265,8 @@ function docChamCongHomNay_(maNV, ngay) {
   if (!sh || sh.getLastRow() < 2) return ra;
   var v = sh.getRange(2, 1, sh.getLastRow() - 1, COT_CHAMCONG.length).getValues();
   for (var i = 0; i < v.length; i++) {
-    if (String(v[i][0]) === ngay && String(v[i][2]).toUpperCase() === maNV.toUpperCase()) {
-      var ban = {gio: String(v[i][5]), ca: String(v[i][6]), tre: v[i][7], som: v[i][8], quy: v[i][11]};
+    if (ngayChuoi_(v[i][0]) === ngay && String(v[i][2]).toUpperCase() === maNV.toUpperCase()) {
+      var ban = {gio: gioChuoi_(v[i][5]), ca: String(v[i][6]), tre: v[i][7], som: v[i][8], quy: v[i][11]};
       if (String(v[i][4]) === 'VAO') ra.vao = ban; else if (String(v[i][4]) === 'RA') ra.ra = ban;
     }
   }
@@ -255,7 +279,7 @@ function demViPhamThang_(maNV, thangNam) {
   if (!sh || sh.getLastRow() < 2) return {soLan: 0, tongQuy: 0};
   var v = sh.getRange(2, 1, sh.getLastRow() - 1, COT_CHAMCONG.length).getValues();
   for (var i = 0; i < v.length; i++) {
-    if (String(v[i][0]).indexOf(thangNam) === 0 &&
+    if (ngayChuoi_(v[i][0]).indexOf(thangNam) === 0 &&
         String(v[i][2]).toUpperCase() === maNV.toUpperCase() &&
         String(v[i][9]) === 'CO') {
       n++; tien += Number(v[i][11]) || 0;
