@@ -95,8 +95,7 @@ function caiDatLanDau() {
   }
   // tạo thư mục Drive riêng để lưu ảnh (chỉ app này tạo/đụng tới, nhờ quyền drive.file)
   if (!docCauHinh_()['thu_muc_anh_id']) {
-    var folder = DriveApp.createFolder(TEN_THU_MUC);
-    ghiCauHinh_('thu_muc_anh_id', folder.getId());
+    ghiCauHinh_('thu_muc_anh_id', taoThuMucAnh_());
   }
   // xoá sheet ANH cũ (ảnh nhét thẳng trong Sheet) nếu còn từ bản trước — nặng file, không dùng nữa
   var shAnhCu = ss.getSheetByName('ANH');
@@ -127,17 +126,24 @@ function donDepAnhCu_() {
   if (!c.thu_muc_anh_id) return {soLuong: 0, dungLuong: 0};
   var soNgay = so_(c.giu_anh_ngay, 45);
   var moc = new Date(Date.now() - soNgay * 24 * 60 * 60 * 1000);
-  var folder = DriveApp.getFolderById(c.thu_muc_anh_id);
-  var files = folder.getFiles();
   var soLuong = 0, dungLuong = 0;
-  while (files.hasNext()) {
-    var f = files.next();
-    if (f.getDateCreated() < moc) {
-      dungLuong += f.getSize();
-      f.setTrashed(true);
-      soLuong++;
-    }
-  }
+  var pageToken = null;
+  do {
+    var kq = Drive.Files.list({
+      q: "'" + c.thu_muc_anh_id + "' in parents and trashed = false",
+      fields: 'nextPageToken, files(id, size, createdTime)',
+      pageSize: 200,
+      pageToken: pageToken || undefined
+    });
+    (kq.files || []).forEach(function (f) {
+      if (new Date(f.createdTime) < moc) {
+        dungLuong += Number(f.size) || 0;
+        Drive.Files.update({ trashed: true }, f.id);
+        soLuong++;
+      }
+    });
+    pageToken = kq.nextPageToken;
+  } while (pageToken);
   return {soLuong: soLuong, dungLuong: dungLuong};
 }
 
@@ -370,20 +376,27 @@ function demViPhamThang_(maNV, thangNam) {
 }
 
 /**
- * Lưu ảnh vào thư mục Drive riêng của app (quyền drive.file — chỉ đụng file
- * do chính app tạo ra). Sheet chỉ lưu đường link nên KHÔNG bị nặng dù chạy
- * hàng trăm/nghìn ảnh mỗi tháng, khác với cách nhét ảnh thẳng vào ô Sheet.
+ * Lưu ảnh vào thư mục Drive riêng của app, qua Drive API v3 (Drive.Files...)
+ * — KHÔNG dùng DriveApp, vì DriveApp đòi quyền "toàn bộ Drive" ngay cả khi
+ * đã khai quyền hẹp drive.file trong appsscript.json. Gọi qua Drive API v3
+ * thì quyền hẹp mới hoạt động đúng như thiết kế: app chỉ đụng được file do
+ * chính nó tạo ra, không đọc được các file khác trong Drive của sếp.
+ * Sheet chỉ lưu đường link nên KHÔNG bị nặng dù chạy hàng nghìn ảnh mỗi tháng.
  */
+function taoThuMucAnh_() {
+  var res = Drive.Files.create({ name: TEN_THU_MUC, mimeType: 'application/vnd.google-apps.folder' });
+  return res.id;
+}
+
 function luuAnh_(dataUrl, tenFile, c) {
   if (!dataUrl || dataUrl.indexOf('base64,') < 0) return '';
   try {
     var b64 = dataUrl.split('base64,')[1];
     var blob = Utilities.newBlob(Utilities.base64Decode(b64), 'image/jpeg', tenFile + '.jpg');
     var thuMucId = c.thu_muc_anh_id;
-    var folder = thuMucId ? DriveApp.getFolderById(thuMucId) : DriveApp.createFolder(TEN_THU_MUC);
-    if (!thuMucId) ghiCauHinh_('thu_muc_anh_id', folder.getId());
-    var f = folder.createFile(blob);
-    return 'https://drive.google.com/file/d/' + f.getId() + '/view';
+    if (!thuMucId) { thuMucId = taoThuMucAnh_(); ghiCauHinh_('thu_muc_anh_id', thuMucId); }
+    var f = Drive.Files.create({ name: tenFile + '.jpg', parents: [thuMucId] }, blob);
+    return 'https://drive.google.com/file/d/' + f.id + '/view';
   } catch (err) {
     return 'LOI_ANH: ' + err;
   }
