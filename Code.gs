@@ -13,11 +13,15 @@
  *     - Ai có quyền truy cập: Bất kỳ ai
  *  5. Copy URL /exec dán vào index.html
  *
- * QUYỀN: script xin quyền với đúng file Sheet này (@OnlyCurrentDoc) và
- * quyền "drive.file" — CHỈ đụng tới những file DO CHÍNH APP NÀY TẠO RA
- * (thư mục ảnh chấm công), không đọc/sửa được bất kỳ file nào khác
- * trong Drive của sếp. Đây là quyền hẹp, khác hẳn quyền "toàn bộ Drive"
- * đã gây lỗi access_denied ở bản trước.
+ * QUYỀN: script xin quyền với đúng file Sheet này (@OnlyCurrentDoc), quyền
+ * "drive.file" — CHỈ đụng tới những file DO CHÍNH APP NÀY TẠO RA (thư mục
+ * ảnh chấm công), không đọc/sửa được bất kỳ file nào khác trong Drive của
+ * sếp; và quyền "script.scriptapp" để tự đặt hẹn giờ dọn ảnh cũ hằng ngày.
+ * Đây đều là quyền hẹp, khác hẳn quyền "toàn bộ Drive" đã gây lỗi
+ * access_denied ở bản trước.
+ *
+ * ẢNH CHẤM CÔNG TỰ ĐỘNG XOÁ SAU 45 NGÀY (đổi số ngày ở tab CAUHINH,
+ * khoá "giu_anh_ngay") — bật bằng menu "5. Bật tự động dọn ảnh mỗi ngày".
  *****************************************************************/
 
 /**
@@ -48,6 +52,7 @@ var CAUHINH_MAC_DINH = [
   ['ca_sang_ra',        '18:00',     'Giờ ra ca sáng'],
   ['ca_chieu_vao',      '12:00',     'Giờ vào ca chiều'],
   ['ca_chieu_ra',       '21:00',     'Giờ ra ca chiều'],
+  ['giu_anh_ngay',      '45',        'Ảnh chấm công cũ hơn số ngày này bị tự động xoá khỏi Drive (đã chốt lương xong)'],
   ['thu_muc_anh_id',    '',          'Tự điền khi cài đặt lần đầu — id thư mục Drive lưu ảnh'],
   ['muoi_bam_pin',      '',          'Tự sinh khi cài đặt lần đầu — KHÔNG sửa, sửa là mọi PIN hỏng']
 ];
@@ -59,6 +64,9 @@ function onOpen() {
     .addItem('1. Cài đặt lần đầu', 'caiDatLanDau')
     .addItem('2. Thêm nhân viên mẫu', 'themNhanVienMau')
     .addItem('3. Xem link ứng dụng web', 'xemLinkWebApp')
+    .addSeparator()
+    .addItem('4. Dọn ảnh cũ ngay (thử tay)', 'donDepAnhCuThuCong')
+    .addItem('5. Bật tự động dọn ảnh mỗi ngày', 'batTuDongDonAnh')
     .addSeparator()
     .addItem('Kiểm tra cấu hình', 'kiemTraCauHinh')
     .addToUi();
@@ -102,7 +110,63 @@ function caiDatLanDau() {
     '· Đã tạo 3 tab: NHANSU, CHAMCONG, CAUHINH\n' +
     '· Đã tạo thư mục Drive "' + TEN_THU_MUC + '" (riêng tư, chỉ app này đụng tới) để lưu ảnh —\n' +
     '  Sheet chỉ giữ đường link nên không bị nặng dù chấm công nhiều tháng.\n\n' +
-    'Bước tiếp: mở tab CAUHINH điền toạ độ văn phòng, rồi thêm nhân viên vào tab NHANSU.'
+    'Bước tiếp:\n' +
+    '1. Mở tab CAUHINH điền toạ độ văn phòng, rồi thêm nhân viên vào tab NHANSU.\n' +
+    '2. Vào menu bấm "5. Bật tự động dọn ảnh mỗi ngày" để ảnh chấm công cũ hơn 45 ngày tự xoá sau khi lương tháng đã chốt.'
+  );
+}
+
+/*================= DỌN ẢNH CŨ =================*/
+/**
+ * Xoá khỏi Drive những ảnh chấm công cũ hơn số ngày cấu hình ở "giu_anh_ngay"
+ * (mặc định 45 ngày — đủ thời gian để chốt lương tháng trước khi ảnh bị xoá).
+ * Không đụng gì tới dữ liệu trong Sheet, chỉ xoá file ảnh trong Drive để đỡ tốn dung lượng.
+ */
+function donDepAnhCu_() {
+  var c = docCauHinh_();
+  if (!c.thu_muc_anh_id) return {soLuong: 0, dungLuong: 0};
+  var soNgay = so_(c.giu_anh_ngay, 45);
+  var moc = new Date(Date.now() - soNgay * 24 * 60 * 60 * 1000);
+  var folder = DriveApp.getFolderById(c.thu_muc_anh_id);
+  var files = folder.getFiles();
+  var soLuong = 0, dungLuong = 0;
+  while (files.hasNext()) {
+    var f = files.next();
+    if (f.getDateCreated() < moc) {
+      dungLuong += f.getSize();
+      f.setTrashed(true);
+      soLuong++;
+    }
+  }
+  return {soLuong: soLuong, dungLuong: dungLuong};
+}
+
+function donDepAnhCuThuCong() {
+  var c = docCauHinh_();
+  if (!c.thu_muc_anh_id) { SpreadsheetApp.getUi().alert('Chạy "Cài đặt lần đầu" trước đã.'); return; }
+  var kq = donDepAnhCu_();
+  SpreadsheetApp.getUi().alert(
+    'Đã dọn xong.\n\n' +
+    '· Xoá ' + kq.soLuong + ' ảnh cũ hơn ' + (c.giu_anh_ngay || 45) + ' ngày\n' +
+    '· Giải phóng khoảng ' + (Math.round(kq.dungLuong / 1024 / 1024 * 10) / 10) + ' MB'
+  );
+}
+
+/** Hàm này được trigger hằng ngày gọi — chạy nền, không hiện thông báo */
+function chayTuDongDonDep() {
+  try { donDepAnhCu_(); } catch (err) { /* im lặng, tránh trigger bị Google tự tắt vì lỗi liên tục */ }
+}
+
+function batTuDongDonAnh() {
+  var trig = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < trig.length; i++) {
+    if (trig[i].getHandlerFunction() === 'chayTuDongDonDep') ScriptApp.deleteTrigger(trig[i]);
+  }
+  ScriptApp.newTrigger('chayTuDongDonDep').timeBased().everyDays(1).atHour(2).create();
+  SpreadsheetApp.getUi().alert(
+    'Đã bật tự động dọn ảnh.\n\n' +
+    'Mỗi ngày lúc 2 giờ sáng, app tự xoá ảnh chấm công cũ hơn ' + (docCauHinh_().giu_anh_ngay || 45) + ' ngày trong Drive.\n\n' +
+    'Muốn đổi số ngày giữ ảnh thì sửa dòng "giu_anh_ngay" trong tab CAUHINH (không cần bật lại).'
   );
 }
 
@@ -135,12 +199,14 @@ function kiemTraCauHinh() {
   if (!c.office_lat || !c.office_lng) thieu.push('toạ độ văn phòng');
   var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NHANSU);
   var soNV = sh ? Math.max(0, sh.getLastRow() - 1) : 0;
+  var coTrigger = ScriptApp.getProjectTriggers().some(function(t){ return t.getHandlerFunction() === 'chayTuDongDonDep'; });
 
   SpreadsheetApp.getUi().alert(
     'CẤU HÌNH HIỆN TẠI\n\n' +
     'Văn phòng: ' + c.office_lat + ', ' + c.office_lng + ' · bán kính ' + c.ban_kinh_m + 'm\n' +
     'Ca sáng: ' + c.ca_sang_vao + '–' + c.ca_sang_ra + ' · Ca chiều: ' + c.ca_chieu_vao + '–' + c.ca_chieu_ra + '\n' +
     'Ngưỡng trễ: ' + c.nguong_tre_phut + ' phút · Quỹ: ' + c.muc_quy_lan_1_3 + 'đ (lần 1-3), ' + c.muc_quy_tu_lan_4 + 'đ (từ lần 4)\n' +
+    'Giữ ảnh: ' + (c.giu_anh_ngay || 45) + ' ngày · Tự động dọn ảnh: ' + (coTrigger ? '✅ ĐÃ BẬT' : '⚠️ CHƯA BẬT') + '\n' +
     'Số nhân viên: ' + soNV + '\n\n' +
     (thieu.length ? ('⚠️ CÒN THIẾU:\n· ' + thieu.join('\n· ')) : '✅ Đủ điều kiện chạy.')
   );
