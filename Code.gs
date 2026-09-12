@@ -5,14 +5,19 @@
  *
  * CÀI ĐẶT:
  *  1. Dán toàn bộ file này vào Apps Script của Sheet
- *  2. Chạy hàm caiDatLanDau() một lần (cấp quyền khi được hỏi)
- *  3. Triển khai > Ứng dụng web
+ *  2. Bật hiện file appsscript.json (⚙️ Cài đặt dự án > tick "Hiện tệp kê khai")
+ *     rồi dán đúng nội dung mẫu ở cuối file này vào appsscript.json
+ *  3. Chạy hàm caiDatLanDau() một lần (cấp quyền khi được hỏi)
+ *  4. Triển khai > Ứng dụng web
  *     - Chạy với tư cách: Tôi
  *     - Ai có quyền truy cập: Bất kỳ ai
- *  4. Copy URL /exec dán vào index.html
+ *  5. Copy URL /exec dán vào index.html
  *
- * QUYỀN: script CHỈ xin quyền với đúng file Sheet này (@OnlyCurrentDoc).
- * Không đụng tới Drive, không đọc file khác, không gửi mail.
+ * QUYỀN: script xin quyền với đúng file Sheet này (@OnlyCurrentDoc) và
+ * quyền "drive.file" — CHỈ đụng tới những file DO CHÍNH APP NÀY TẠO RA
+ * (thư mục ảnh chấm công), không đọc/sửa được bất kỳ file nào khác
+ * trong Drive của sếp. Đây là quyền hẹp, khác hẳn quyền "toàn bộ Drive"
+ * đã gây lỗi access_denied ở bản trước.
  *****************************************************************/
 
 /**
@@ -22,7 +27,7 @@
 var SHEET_NHANSU   = 'NHANSU';
 var SHEET_CHAMCONG = 'CHAMCONG';
 var SHEET_CAUHINH  = 'CAUHINH';
-var SHEET_ANH      = 'ANH';
+var TEN_THU_MUC    = 'CHAM CONG - ANH';
 var TZ             = 'Asia/Ho_Chi_Minh';
 
 var COT_NHANSU   = ['MaNV','HoTen','Ca','PIN_TAM','PIN_HASH','Email','TrangThai','DeviceId','GhiChu'];
@@ -43,6 +48,7 @@ var CAUHINH_MAC_DINH = [
   ['ca_sang_ra',        '18:00',     'Giờ ra ca sáng'],
   ['ca_chieu_vao',      '12:00',     'Giờ vào ca chiều'],
   ['ca_chieu_ra',       '21:00',     'Giờ ra ca chiều'],
+  ['thu_muc_anh_id',    '',          'Tự điền khi cài đặt lần đầu — id thư mục Drive lưu ảnh'],
   ['muoi_bam_pin',      '',          'Tự sinh khi cài đặt lần đầu — KHÔNG sửa, sửa là mọi PIN hỏng']
 ];
 
@@ -74,20 +80,28 @@ function caiDatLanDau() {
   if (shCH.getLastRow() < 2) {
     shCH.getRange(2, 1, CAUHINH_MAC_DINH.length, 3).setValues(CAUHINH_MAC_DINH);
   }
-  taoSheet_(ss, SHEET_ANH, ['Ngay_Gio', 'MaNV', 'Loai', 'Anh (ảnh nằm ngay bên phải)']);
 
   // sinh muối bằm PIN nếu chưa có
   if (!docCauHinh_()['muoi_bam_pin']) {
     ghiCauHinh_('muoi_bam_pin', Utilities.getUuid().replace(/-/g, ''));
   }
+  // tạo thư mục Drive riêng để lưu ảnh (chỉ app này tạo/đụng tới, nhờ quyền drive.file)
+  if (!docCauHinh_()['thu_muc_anh_id']) {
+    var folder = DriveApp.createFolder(TEN_THU_MUC);
+    ghiCauHinh_('thu_muc_anh_id', folder.getId());
+  }
+  // xoá sheet ANH cũ (ảnh nhét thẳng trong Sheet) nếu còn từ bản trước — nặng file, không dùng nữa
+  var shAnhCu = ss.getSheetByName('ANH');
+  if (shAnhCu) ss.deleteSheet(shAnhCu);
   // xoá sheet mặc định trống nếu còn
   var sh1 = ss.getSheetByName('Sheet1') || ss.getSheetByName('Trang tính1');
-  if (sh1 && ss.getSheets().length > 4 && sh1.getLastRow() === 0) ss.deleteSheet(sh1);
+  if (sh1 && ss.getSheets().length > 3 && sh1.getLastRow() === 0) ss.deleteSheet(sh1);
 
   SpreadsheetApp.getUi().alert(
     'Xong!\n\n' +
-    '· Đã tạo 4 tab: NHANSU, CHAMCONG, CAUHINH, ANH\n' +
-    '· Ảnh chấm công lưu ngay trong tab ANH (script không xin quyền Drive)\n\n' +
+    '· Đã tạo 3 tab: NHANSU, CHAMCONG, CAUHINH\n' +
+    '· Đã tạo thư mục Drive "' + TEN_THU_MUC + '" (riêng tư, chỉ app này đụng tới) để lưu ảnh —\n' +
+    '  Sheet chỉ giữ đường link nên không bị nặng dù chấm công nhiều tháng.\n\n' +
     'Bước tiếp: mở tab CAUHINH điền toạ độ văn phòng, rồi thêm nhân viên vào tab NHANSU.'
   );
 }
@@ -117,6 +131,7 @@ function kiemTraCauHinh() {
   var c = docCauHinh_();
   var thieu = [];
   if (!c.muoi_bam_pin)    thieu.push('muoi_bam_pin (chạy Cài đặt lần đầu)');
+  if (!c.thu_muc_anh_id)  thieu.push('thu_muc_anh_id (chạy Cài đặt lần đầu)');
   if (!c.office_lat || !c.office_lng) thieu.push('toạ độ văn phòng');
   var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NHANSU);
   var soNV = sh ? Math.max(0, sh.getLastRow() - 1) : 0;
@@ -288,20 +303,21 @@ function demViPhamThang_(maNV, thangNam) {
   return {soLan: n, tongQuy: tien};
 }
 
-/** Lưu ảnh NGAY TRONG SHEET (tab ANH) — không dùng Drive nên không cần quyền Drive */
-function luuAnh_(dataUrl, tenFile, thongTin) {
+/**
+ * Lưu ảnh vào thư mục Drive riêng của app (quyền drive.file — chỉ đụng file
+ * do chính app tạo ra). Sheet chỉ lưu đường link nên KHÔNG bị nặng dù chạy
+ * hàng trăm/nghìn ảnh mỗi tháng, khác với cách nhét ảnh thẳng vào ô Sheet.
+ */
+function luuAnh_(dataUrl, tenFile, c) {
   if (!dataUrl || dataUrl.indexOf('base64,') < 0) return '';
   try {
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var sh = ss.getSheetByName(SHEET_ANH);
-    if (!sh) sh = taoSheet_(ss, SHEET_ANH, ['Ngay_Gio', 'MaNV', 'Loai', 'Anh (ảnh nằm ngay bên phải)']);
     var b64 = dataUrl.split('base64,')[1];
     var blob = Utilities.newBlob(Utilities.base64Decode(b64), 'image/jpeg', tenFile + '.jpg');
-    var dong = sh.getLastRow() + 1;
-    sh.getRange(dong, 1, 1, 3).setValues([[thongTin.gio, thongTin.maNV, thongTin.loai]]);
-    sh.setRowHeight(dong, 150);
-    sh.insertImage(blob, 4, dong);
-    return SHEET_ANH + '!A' + dong;
+    var thuMucId = c.thu_muc_anh_id;
+    var folder = thuMucId ? DriveApp.getFolderById(thuMucId) : DriveApp.createFolder(TEN_THU_MUC);
+    if (!thuMucId) ghiCauHinh_('thu_muc_anh_id', folder.getId());
+    var f = folder.createFile(blob);
+    return 'https://drive.google.com/file/d/' + f.getId() + '/view';
   } catch (err) {
     return 'LOI_ANH: ' + err;
   }
@@ -352,7 +368,7 @@ function ping_() {
     moc: now.getTime(),
     caSang: c.ca_sang_vao + '–' + c.ca_sang_ra,
     caChieu: c.ca_chieu_vao + '–' + c.ca_chieu_ra,
-    sanSang: !!c.muoi_bam_pin
+    sanSang: !!(c.muoi_bam_pin && c.thu_muc_anh_id)
   };
 }
 
@@ -490,8 +506,7 @@ function cham_(req) {
 
   // lưu ảnh rồi mới khoá ghi (giữ khoá càng ngắn càng tốt)
   var anhUrl = luuAnh_(req.anh,
-    ngay + '_' + nv.maNV + '_' + loai + '_' + Utilities.formatDate(now, TZ, 'HHmmss'),
-    {gio: ngay + ' ' + gio, maNV: nv.maNV, loai: loai});
+    ngay + '_' + nv.maNV + '_' + loai + '_' + Utilities.formatDate(now, TZ, 'HHmmss'), c);
 
   var lock = LockService.getScriptLock();
   try {
