@@ -10,12 +10,19 @@
  *     - Chạy với tư cách: Tôi
  *     - Ai có quyền truy cập: Bất kỳ ai
  *  4. Copy URL /exec dán vào index.html
+ *
+ * QUYỀN: script CHỈ xin quyền với đúng file Sheet này (@OnlyCurrentDoc).
+ * Không đụng tới Drive, không đọc file khác, không gửi mail.
  *****************************************************************/
+
+/**
+ * @OnlyCurrentDoc
+ */
 
 var SHEET_NHANSU   = 'NHANSU';
 var SHEET_CHAMCONG = 'CHAMCONG';
 var SHEET_CAUHINH  = 'CAUHINH';
-var TEN_THU_MUC    = 'CHAM CONG - ANH';
+var SHEET_ANH      = 'ANH';
 var TZ             = 'Asia/Ho_Chi_Minh';
 
 var COT_NHANSU   = ['MaNV','HoTen','Ca','PIN_TAM','PIN_HASH','Email','TrangThai','DeviceId','GhiChu'];
@@ -36,7 +43,6 @@ var CAUHINH_MAC_DINH = [
   ['ca_sang_ra',        '18:00',     'Giờ ra ca sáng'],
   ['ca_chieu_vao',      '12:00',     'Giờ vào ca chiều'],
   ['ca_chieu_ra',       '21:00',     'Giờ ra ca chiều'],
-  ['thu_muc_anh_id',    '',          'Tự điền khi cài đặt lần đầu'],
   ['muoi_bam_pin',      '',          'Tự sinh khi cài đặt lần đầu — KHÔNG sửa, sửa là mọi PIN hỏng']
 ];
 
@@ -62,23 +68,20 @@ function caiDatLanDau() {
   if (shCH.getLastRow() < 2) {
     shCH.getRange(2, 1, CAUHINH_MAC_DINH.length, 3).setValues(CAUHINH_MAC_DINH);
   }
+  taoSheet_(ss, SHEET_ANH, ['Ngay_Gio', 'MaNV', 'Loai', 'Anh (ảnh nằm ngay bên phải)']);
+
   // sinh muối bằm PIN nếu chưa có
   if (!docCauHinh_()['muoi_bam_pin']) {
     ghiCauHinh_('muoi_bam_pin', Utilities.getUuid().replace(/-/g, ''));
   }
-  // tạo thư mục ảnh riêng tư
-  if (!docCauHinh_()['thu_muc_anh_id']) {
-    var folder = DriveApp.createFolder(TEN_THU_MUC);
-    ghiCauHinh_('thu_muc_anh_id', folder.getId());
-  }
   // xoá sheet mặc định trống nếu còn
   var sh1 = ss.getSheetByName('Sheet1') || ss.getSheetByName('Trang tính1');
-  if (sh1 && ss.getSheets().length > 3 && sh1.getLastRow() === 0) ss.deleteSheet(sh1);
+  if (sh1 && ss.getSheets().length > 4 && sh1.getLastRow() === 0) ss.deleteSheet(sh1);
 
   SpreadsheetApp.getUi().alert(
     'Xong!\n\n' +
-    '· Đã tạo 3 tab: NHANSU, CHAMCONG, CAUHINH\n' +
-    '· Đã tạo thư mục Drive "' + TEN_THU_MUC + '" (riêng tư) để lưu ảnh\n\n' +
+    '· Đã tạo 4 tab: NHANSU, CHAMCONG, CAUHINH, ANH\n' +
+    '· Ảnh chấm công lưu ngay trong tab ANH (script không xin quyền Drive)\n\n' +
     'Bước tiếp: mở tab CAUHINH điền toạ độ văn phòng, rồi thêm nhân viên vào tab NHANSU.'
   );
 }
@@ -96,10 +99,11 @@ function themNhanVienMau() {
 }
 
 function xemLinkWebApp() {
-  var url = ScriptApp.getService().getUrl();
   SpreadsheetApp.getUi().alert(
-    url ? ('Link ứng dụng web:\n\n' + url + '\n\nDán link này vào dòng API_URL trong file index.html.')
-        : 'Chưa triển khai. Vào Triển khai > Triển khai mới > Ứng dụng web.'
+    'Lấy link ứng dụng web:\n\n' +
+    'Tiện ích mở rộng > Apps Script > nút Triển khai (Deploy) >\n' +
+    'Quản lý các bản triển khai — link kết thúc bằng /exec.\n\n' +
+    'Dán link đó vào dòng API_URL trong file index.html.'
   );
 }
 
@@ -107,7 +111,6 @@ function kiemTraCauHinh() {
   var c = docCauHinh_();
   var thieu = [];
   if (!c.muoi_bam_pin)    thieu.push('muoi_bam_pin (chạy Cài đặt lần đầu)');
-  if (!c.thu_muc_anh_id)  thieu.push('thu_muc_anh_id (chạy Cài đặt lần đầu)');
   if (!c.office_lat || !c.office_lng) thieu.push('toạ độ văn phòng');
   var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NHANSU);
   var soNV = sh ? Math.max(0, sh.getLastRow() - 1) : 0;
@@ -242,14 +245,20 @@ function demViPhamThang_(maNV, thangNam) {
   return {soLan: n, tongQuy: tien};
 }
 
-function luuAnh_(dataUrl, tenFile, c) {
+/** Lưu ảnh NGAY TRONG SHEET (tab ANH) — không dùng Drive nên không cần quyền Drive */
+function luuAnh_(dataUrl, tenFile, thongTin) {
   if (!dataUrl || dataUrl.indexOf('base64,') < 0) return '';
   try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sh = ss.getSheetByName(SHEET_ANH);
+    if (!sh) sh = taoSheet_(ss, SHEET_ANH, ['Ngay_Gio', 'MaNV', 'Loai', 'Anh (ảnh nằm ngay bên phải)']);
     var b64 = dataUrl.split('base64,')[1];
     var blob = Utilities.newBlob(Utilities.base64Decode(b64), 'image/jpeg', tenFile + '.jpg');
-    var folder = c.thu_muc_anh_id ? DriveApp.getFolderById(c.thu_muc_anh_id) : DriveApp.createFolder(TEN_THU_MUC);
-    var f = folder.createFile(blob);
-    return 'https://drive.google.com/file/d/' + f.getId() + '/view';
+    var dong = sh.getLastRow() + 1;
+    sh.getRange(dong, 1, 1, 3).setValues([[thongTin.gio, thongTin.maNV, thongTin.loai]]);
+    sh.setRowHeight(dong, 150);
+    sh.insertImage(blob, 4, dong);
+    return SHEET_ANH + '!A' + dong;
   } catch (err) {
     return 'LOI_ANH: ' + err;
   }
@@ -300,7 +309,7 @@ function ping_() {
     moc: now.getTime(),
     caSang: c.ca_sang_vao + '–' + c.ca_sang_ra,
     caChieu: c.ca_chieu_vao + '–' + c.ca_chieu_ra,
-    sanSang: !!(c.muoi_bam_pin && c.thu_muc_anh_id)
+    sanSang: !!c.muoi_bam_pin
   };
 }
 
@@ -437,7 +446,9 @@ function cham_(req) {
   if (loai === 'RA' && !homNay.vao) ghiChu.push('Chấm ra mà không có lượt chấm vào — cần trưởng bộ phận xác nhận.');
 
   // lưu ảnh rồi mới khoá ghi (giữ khoá càng ngắn càng tốt)
-  var anhUrl = luuAnh_(req.anh, ngay + '_' + nv.maNV + '_' + loai + '_' + Utilities.formatDate(now, TZ, 'HHmmss'), c);
+  var anhUrl = luuAnh_(req.anh,
+    ngay + '_' + nv.maNV + '_' + loai + '_' + Utilities.formatDate(now, TZ, 'HHmmss'),
+    {gio: ngay + ' ' + gio, maNV: nv.maNV, loai: loai});
 
   var lock = LockService.getScriptLock();
   try {
