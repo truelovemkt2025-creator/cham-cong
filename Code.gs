@@ -64,6 +64,7 @@ var CAUHINH_MAC_DINH = [
   ['ca_chieu_nghi_vao', '17:00',     'Giờ bắt đầu nghỉ giữa ca chiều'],
   ['ca_chieu_nghi_ra',  '18:00',     'Giờ hết nghỉ giữa ca chiều'],
   ['giu_anh_ngay',      '45',        'Ảnh chấm công cũ hơn số ngày này bị tự động xoá khỏi Drive (đã chốt lương xong)'],
+  ['link_app',          'https://truelovemkt2025-creator.github.io/cham-cong/', 'Link app chấm công, dùng trong email nhắc chưa chấm công'],
   ['thu_muc_anh_id',    '',          'Tự điền khi cài đặt lần đầu — id thư mục Drive lưu ảnh'],
   ['muoi_bam_pin',      '',          'Tự sinh khi cài đặt lần đầu — KHÔNG sửa, sửa là mọi PIN hỏng']
 ];
@@ -78,6 +79,9 @@ function onOpen() {
     .addSeparator()
     .addItem('4. Dọn ảnh cũ ngay (thử tay)', 'donDepAnhCuThuCong')
     .addItem('5. Bật tự động dọn ảnh mỗi ngày', 'batTuDongDonAnh')
+    .addSeparator()
+    .addItem('6. Gửi nhắc chưa chấm công ngay (thử tay)', 'guiNhacThuCong')
+    .addItem('7. Bật tự động nhắc chưa chấm công mỗi ngày', 'batTuDongNhacChuaChamCong')
     .addSeparator()
     .addItem('Kiểm tra cấu hình', 'kiemTraCauHinh')
     .addToUi();
@@ -199,6 +203,75 @@ function batTuDongDonAnh() {
   );
 }
 
+/*================= NHẮC CHƯA CHẤM CÔNG =================*/
+/**
+ * Mỗi ngày (trừ Chủ nhật) lúc 13h, quét toàn bộ nhân viên đang làm (TrangThai=DANG_LAM,
+ * có Email), ai CHƯA có dòng "VAO" trong CHAMCONG của NGÀY HÔM NAY thì gửi email nhắc
+ * THẲNG cho người đó (không gửi cho sếp). Vì ca linh hoạt nên hệ thống không biết trước
+ * hôm nay ai nghỉ — người đang nghỉ phép/nghỉ đột xuất cứ bỏ qua email này, không cần
+ * làm gì thêm, không phải báo lại.
+ */
+function guiNhacChuaChamCong_() {
+  var homNay = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
+  if (tenThu_(new Date()) === 'CN') return { daGui: 0, boQua: 'Chủ nhật' };
+
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NHANSU);
+  if (!sh || sh.getLastRow() < 2) return { daGui: 0 };
+  var v = sh.getRange(2, 1, sh.getLastRow() - 1, COT_NHANSU.length).getValues();
+  var link = docCauHinh_().link_app || 'https://truelovemkt2025-creator.github.io/cham-cong/';
+  var daGui = 0;
+
+  for (var i = 0; i < v.length; i++) {
+    var maNV = String(v[i][0]).trim();
+    var hoTen = String(v[i][1]).trim();
+    var email = String(v[i][5]).trim();
+    var trangThai = String(v[i][6]).trim() || 'DANG_LAM';
+    if (!maNV || trangThai !== 'DANG_LAM' || !email) continue;
+    if (docChamCongHomNay_(maNV, homNay).vao) continue; // đã chấm vào rồi, bỏ qua
+
+    try {
+      MailApp.sendEmail({
+        to: email,
+        subject: '⏰ Nhắc chấm công hôm nay — True Love',
+        body:
+          'Chào ' + hoTen + ',\n\n' +
+          'Hệ thống chưa ghi nhận bạn chấm công VÀO hôm nay (' + homNay + ').\n\n' +
+          'Nếu đang trong ca làm, bạn chấm công tại đây:\n' + link + '\n\n' +
+          'Nếu hôm nay bạn nghỉ (phép/đột xuất) thì bỏ qua email này, không cần trả lời.\n\n' +
+          '— App Chấm Công True Love (email tự động, không trả lời email này)'
+      });
+      daGui++;
+    } catch (err) { /* 1 người gửi lỗi (vd email sai định dạng) không chặn các người còn lại */ }
+  }
+  return { daGui: daGui };
+}
+
+/** Hàm này được trigger hằng ngày gọi — chạy nền, không hiện thông báo */
+function chayTuDongNhacChuaChamCong() {
+  try { guiNhacChuaChamCong_(); } catch (err) { /* im lặng, tránh trigger bị Google tự tắt vì lỗi liên tục */ }
+}
+
+function batTuDongNhacChuaChamCong() {
+  var trig = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < trig.length; i++) {
+    if (trig[i].getHandlerFunction() === 'chayTuDongNhacChuaChamCong') ScriptApp.deleteTrigger(trig[i]);
+  }
+  ScriptApp.newTrigger('chayTuDongNhacChuaChamCong').timeBased().everyDays(1).atHour(13).create();
+  SpreadsheetApp.getUi().alert(
+    'Đã bật nhắc chấm công tự động.\n\n' +
+    'Mỗi ngày lúc 13h (trừ Chủ nhật), ai chưa chấm VÀO hôm đó sẽ nhận email nhắc thẳng cho mình.\n' +
+    'Chỉ gửi được cho người đã có Email trong tab NHANSU — ai chưa có email thì chưa nhắc được, sếp bổ sung dần.'
+  );
+}
+
+function guiNhacThuCong() {
+  var kq = guiNhacChuaChamCong_();
+  SpreadsheetApp.getUi().alert(
+    kq.boQua ? ('Hôm nay là ' + kq.boQua + ', không gửi nhắc hôm nay.') :
+    ('Đã gửi email nhắc cho ' + kq.daGui + ' người chưa chấm công hôm nay.')
+  );
+}
+
 function themNhanVienMau() {
   var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NHANSU);
   if (!sh) { SpreadsheetApp.getUi().alert('Chạy "Cài đặt lần đầu" trước đã.'); return; }
@@ -229,6 +302,7 @@ function kiemTraCauHinh() {
   var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NHANSU);
   var soNV = sh ? Math.max(0, sh.getLastRow() - 1) : 0;
   var coTrigger = ScriptApp.getProjectTriggers().some(function(t){ return t.getHandlerFunction() === 'chayTuDongDonDep'; });
+  var coTriggerNhac = ScriptApp.getProjectTriggers().some(function(t){ return t.getHandlerFunction() === 'chayTuDongNhacChuaChamCong'; });
 
   SpreadsheetApp.getUi().alert(
     'CẤU HÌNH HIỆN TẠI\n\n' +
@@ -236,6 +310,7 @@ function kiemTraCauHinh() {
     'Ca sáng: ' + c.ca_sang_vao + '–' + c.ca_sang_ra + ' · Ca chiều: ' + c.ca_chieu_vao + '–' + c.ca_chieu_ra + '\n' +
     'Ngưỡng trễ: ' + c.nguong_tre_phut + ' phút · Quỹ: ' + c.muc_quy_lan_1_3 + 'đ (lần 1-3), ' + c.muc_quy_tu_lan_4 + 'đ (từ lần 4)\n' +
     'Giữ ảnh: ' + (c.giu_anh_ngay || 45) + ' ngày · Tự động dọn ảnh: ' + (coTrigger ? '✅ ĐÃ BẬT' : '⚠️ CHƯA BẬT') + '\n' +
+    'Tự động nhắc chưa chấm công (13h, trừ CN): ' + (coTriggerNhac ? '✅ ĐÃ BẬT' : '⚠️ CHƯA BẬT') + '\n' +
     'Số nhân viên: ' + soNV + '\n\n' +
     (thieu.length ? ('⚠️ CÒN THIẾU:\n· ' + thieu.join('\n· ')) : '✅ Đủ điều kiện chạy.')
   );
