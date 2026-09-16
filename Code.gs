@@ -264,6 +264,17 @@ function batTuDongNhacChuaChamCong() {
   );
 }
 
+/** Gửi 1 email test về hộp thư của sếp — dùng kiểm tra quyền gửi mail hoạt động,
+ * KHÔNG đụng tới nhân viên thật. Xoá hàm này sau khi đã kiểm tra xong. */
+function guiThuMailKiemTra_TAM() {
+  MailApp.sendEmail({
+    to: 'truelovemkt2025@gmail.com',
+    subject: '✅ Test — App Chấm Công đã gửi được email',
+    body: 'Đây là email kiểm tra tính năng nhắc chấm công (guiNhacChuaChamCong_). Nếu chị nhận được email này nghĩa là quyền gửi mail đã hoạt động đúng. Không cần trả lời.'
+  });
+  Logger.log('Đã gửi email test.');
+}
+
 function guiNhacThuCong() {
   var kq = guiNhacChuaChamCong_();
   SpreadsheetApp.getUi().alert(
