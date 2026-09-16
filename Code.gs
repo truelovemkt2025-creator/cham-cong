@@ -22,6 +22,13 @@
  *
  * ẢNH CHẤM CÔNG TỰ ĐỘNG XOÁ SAU 45 NGÀY (đổi số ngày ở tab CAUHINH,
  * khoá "giu_anh_ngay") — bật bằng menu "5. Bật tự động dọn ảnh mỗi ngày".
+ *
+ * NỢ GIỜ LÀM BÙ (16/09): tính theo TỔNG GIỜ LÀM CẢ NGÀY (chấm vào → chấm ra,
+ * trừ giờ nghỉ giữa ca) so với 8 tiếng chuẩn — không cộng riêng "trễ vào" +
+ * "sớm ra" như bản đầu. Ai vào trễ nhưng chủ động ở lại bù ngay trong ngày
+ * thì không bị ghi nợ; ai làm không đủ giờ thì nợ cộng dồn theo tháng
+ * (tab CHAMCONG cột ChenhLechPhut, âm = thiếu). Ca linh hoạt ngày này qua
+ * ngày khác — cứ để cột Ca trong NHANSU là "auto", app tự nhận diện.
  *****************************************************************/
 
 /**
@@ -36,7 +43,8 @@ var TZ             = 'Asia/Ho_Chi_Minh';
 
 var COT_NHANSU   = ['MaNV','HoTen','Ca','PIN_TAM','PIN_HASH','Email','TrangThai','DeviceId','GhiChu'];
 var COT_CHAMCONG = ['Ngay','Thu','MaNV','HoTen','Loai','Gio','Ca','PhutTre','PhutVeSom','ViPham',
-                    'LanThu','TienQuy','KhoangCach_m','DoChinhXac_m','ToaDo','AnhURL','DeviceId','GhiChu'];
+                    'LanThu','TienQuy','KhoangCach_m','DoChinhXac_m','ToaDo','AnhURL','DeviceId','GhiChu',
+                    'ChenhLechPhut'];
 var COT_CAUHINH  = ['Khoa','GiaTri','MoTa'];
 
 var CAUHINH_MAC_DINH = [
@@ -44,14 +52,17 @@ var CAUHINH_MAC_DINH = [
   ['office_lng',        '106.660172','Kinh độ văn phòng'],
   ['ban_kinh_m',        '150',       'Bán kính quanh văn phòng (mét). Ngoài vùng chỉ gắn cờ, không chặn'],
   ['gps_sai_so_toi_da', '200',       'GPS sai số lớn hơn mức này thì gắn cờ'],
-  ['nguong_tre_phut',   '10',        'Trễ/về sớm từ bao nhiêu phút thì tính vi phạm (nội quy: 10)'],
+  ['nguong_tre_phut',   '10',        'Trễ/về sớm từ bao nhiêu phút thì tính vi phạm, nộp quỹ (nội quy: 10)'],
   ['muc_quy_lan_1_3',   '10000',     'Nộp quỹ lần 1-3 trong tháng'],
   ['muc_quy_tu_lan_4',  '50000',     'Nộp quỹ từ lần thứ 4 trong tháng'],
-  ['nguong_bu_phut',    '30',        'Quá mốc này thì ngoài nộp quỹ còn phải làm bù đúng số phút đó'],
   ['ca_sang_vao',       '09:00',     'Giờ vào ca sáng'],
   ['ca_sang_ra',        '18:00',     'Giờ ra ca sáng'],
+  ['ca_sang_nghi_vao',  '12:00',     'Giờ bắt đầu nghỉ trưa ca sáng'],
+  ['ca_sang_nghi_ra',   '13:00',     'Giờ hết nghỉ trưa ca sáng'],
   ['ca_chieu_vao',      '12:00',     'Giờ vào ca chiều'],
   ['ca_chieu_ra',       '21:00',     'Giờ ra ca chiều'],
+  ['ca_chieu_nghi_vao', '17:00',     'Giờ bắt đầu nghỉ giữa ca chiều'],
+  ['ca_chieu_nghi_ra',  '18:00',     'Giờ hết nghỉ giữa ca chiều'],
   ['giu_anh_ngay',      '45',        'Ảnh chấm công cũ hơn số ngày này bị tự động xoá khỏi Drive (đã chốt lương xong)'],
   ['thu_muc_anh_id',    '',          'Tự điền khi cài đặt lần đầu — id thư mục Drive lưu ảnh'],
   ['muoi_bam_pin',      '',          'Tự sinh khi cài đặt lần đầu — KHÔNG sửa, sửa là mọi PIN hỏng']
@@ -81,6 +92,12 @@ function caiDatLanDau() {
   // làm việc đếm vi phạm trong tháng và kiểm tra "hôm nay đã chấm chưa" bị sai.
   shCC.getRange('A:A').setNumberFormat('@');
   shCC.getRange('F:F').setNumberFormat('@');
+  // Nếu Sheet CHAMCONG có từ bản cũ (thiếu cột ChenhLechPhut mới thêm) thì bổ sung
+  // đúng ô tiêu đề còn thiếu ở cuối, không đụng gì tới dữ liệu các dòng đã có.
+  if (shCC.getLastColumn() < COT_CHAMCONG.length) {
+    shCC.getRange(1, COT_CHAMCONG.length).setValue(COT_CHAMCONG[COT_CHAMCONG.length - 1])
+      .setFontWeight('bold').setBackground('#49469D').setFontColor('#FFFFFF');
+  }
 
   var shCH = taoSheet_(ss, SHEET_CAUHINH, COT_CAUHINH);
   // Ép cột GiaTri về dạng chữ để Sheets KHÔNG đổi "09:00" thành kiểu giờ
@@ -88,6 +105,12 @@ function caiDatLanDau() {
   if (shCH.getLastRow() < 2) {
     shCH.getRange(2, 1, CAUHINH_MAC_DINH.length, 3).setValues(CAUHINH_MAC_DINH);
   }
+  // Thêm các khoá cấu hình còn thiếu (khi cập nhật code có thêm cấu hình mới),
+  // không đụng tới các khoá đã có sẵn giá trị.
+  var hienCo = docCauHinh_();
+  CAUHINH_MAC_DINH.forEach(function (row) {
+    if (!(row[0] in hienCo)) shCH.appendRow(row);
+  });
 
   // sinh muối bằm PIN nếu chưa có
   if (!docCauHinh_()['muoi_bam_pin']) {
@@ -283,6 +306,15 @@ function hhmm_(phut) {
   return ('0' + h).slice(-2) + ':' + ('0' + m).slice(-2);
 }
 
+/** Đổi số phút thành chữ "X giờ Y phút" dễ đọc */
+function dur_(phut) {
+  phut = Math.round(phut);
+  var h = Math.floor(phut / 60), m = phut % 60;
+  if (h && m) return h + ' giờ ' + m + ' phút';
+  if (h) return h + ' giờ';
+  return m + ' phút';
+}
+
 function bamPin_(pin, muoi) {
   var raw = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, muoi + String(pin), Utilities.Charset.UTF_8);
   var s = '';
@@ -373,6 +405,37 @@ function demViPhamThang_(maNV, thangNam) {
     }
   }
   return {soLan: n, tongQuy: tien};
+}
+
+/**
+ * Giờ làm thực tế trong ngày (vào→ra, trừ giờ nghỉ giữa ca NẾU khoảng làm việc
+ * bao trọn giờ nghỉ đó), trả về CHÊNH LỆCH so với 8 tiếng chuẩn (480 phút):
+ * âm = làm THIẾU (nợ giờ, cần làm bù), dương = làm DƯ (trả bớt nợ), 0 = vừa đủ.
+ * Nhờ tính theo tổng giờ cả ngày thay vì cộng riêng "trễ vào" + "sớm ra", ai
+ * vào trễ nhưng chủ động ở lại bù ngay trong ngày thì không bị ghi nợ nữa.
+ */
+function tinhChenhLechGio_(vaoPhut, raPhut, ca, c) {
+  var nghiVao = phutTuChuoi_(ca === 'sang' ? c.ca_sang_nghi_vao : c.ca_chieu_nghi_vao);
+  var nghiRa  = phutTuChuoi_(ca === 'sang' ? c.ca_sang_nghi_ra  : c.ca_chieu_nghi_ra);
+  var phutNghi = (vaoPhut <= nghiVao && raPhut >= nghiRa) ? Math.max(0, nghiRa - nghiVao) : 0;
+  var gioLamThucTe = Math.max(0, raPhut - vaoPhut) - phutNghi;
+  return gioLamThucTe - 480;
+}
+
+/** Tổng chênh lệch giờ (phút) cộng dồn trong tháng, từ các lượt CHẤM RA */
+function tongChenhLechThang_(maNV, thangNam) {
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_CHAMCONG);
+  if (!sh || sh.getLastRow() < 2) return 0;
+  var v = sh.getRange(2, 1, sh.getLastRow() - 1, COT_CHAMCONG.length).getValues();
+  var tong = 0;
+  for (var i = 0; i < v.length; i++) {
+    if (ngayChuoi_(v[i][0]).indexOf(thangNam) === 0 &&
+        String(v[i][2]).toUpperCase() === maNV.toUpperCase() &&
+        String(v[i][4]) === 'RA') {
+      tong += Number(v[i][18]) || 0;
+    }
+  }
+  return tong;
 }
 
 /**
@@ -507,7 +570,9 @@ function trangThaiCuaNV_(nv) {
   var now = new Date(), c = docCauHinh_();
   var ngay = Utilities.formatDate(now, TZ, 'yyyy-MM-dd');
   var homNay = docChamCongHomNay_(nv.maNV, ngay);
-  var thang = demViPhamThang_(nv.maNV, Utilities.formatDate(now, TZ, 'yyyy-MM'));
+  var thangNam = Utilities.formatDate(now, TZ, 'yyyy-MM');
+  var thang = demViPhamThang_(nv.maNV, thangNam);
+  var noGioBuThangPhut = Math.max(0, -tongChenhLechThang_(nv.maNV, thangNam));
   var ca = xacDinhCa_(nv.ca, phutTuChuoi_(Utilities.formatDate(now, TZ, 'HH:mm')), c);
   return {
     ngay: ngay,
@@ -518,7 +583,8 @@ function trangThaiCuaNV_(nv) {
     caVao: ca === 'sang' ? c.ca_sang_vao : c.ca_chieu_vao,
     caRa:  ca === 'sang' ? c.ca_sang_ra  : c.ca_chieu_ra,
     soLanTreThang: thang.soLan,
-    tongQuyThang: thang.tongQuy
+    tongQuyThang: thang.tongQuy,
+    noGioBuThangPhut: noGioBuThangPhut
   };
 }
 
@@ -551,8 +617,7 @@ function cham_(req) {
   var mocVao = phutTuChuoi_(ca === 'sang' ? c.ca_sang_vao : c.ca_chieu_vao);
   var mocRa  = phutTuChuoi_(ca === 'sang' ? c.ca_sang_ra  : c.ca_chieu_ra);
 
-  var nguong   = so_(c.nguong_tre_phut, 10);
-  var nguongBu = so_(c.nguong_bu_phut, 30);
+  var nguong = so_(c.nguong_tre_phut, 10);
   var phutTre = 0, phutSom = 0;
   if (loai === 'VAO') phutTre = Math.max(0, phutHienTai - mocVao);
   else                phutSom = Math.max(0, mocRa - phutHienTai);
@@ -569,7 +634,7 @@ function cham_(req) {
     ngoaiVung = true;
   }
 
-  // vi phạm + quỹ luỹ tiến
+  // vi phạm + quỹ luỹ tiến (kỷ luật đi trễ/về sớm — tính bất kể có bù giờ hay không)
   var viPham = lech >= nguong;
   var lanThu = '', tienQuy = 0, ghiChu = [];
   if (viPham) {
@@ -578,10 +643,22 @@ function cham_(req) {
     tienQuy = lanThu <= 3 ? so_(c.muc_quy_lan_1_3, 10000) : so_(c.muc_quy_tu_lan_4, 50000);
     if (lanThu === 3) ghiChu.push('Lần thứ 3 trong tháng: trưởng bộ phận nhắc nhở trực tiếp.');
     if (lanThu >= 7) ghiChu.push('Quá 6 lần trong tháng: báo sếp xem xét kỷ luật.');
-    if (lech > nguongBu) ghiChu.push('Quá ' + nguongBu + ' phút: phải làm bù ' + lech + ' phút, đăng ký ngày bù với trưởng bộ phận.');
   }
   if (ngoaiVung) ghiChu.push('Ngoài vùng văn phòng hoặc GPS sai số lớn — chờ quản lý xác nhận.');
   if (loai === 'RA' && !homNay.vao) ghiChu.push('Chấm ra mà không có lượt chấm vào — cần trưởng bộ phận xác nhận.');
+
+  // Nợ giờ làm bù: chỉ tính khi CHẤM RA, theo TỔNG GIỜ LÀM THỰC TẾ cả ngày (vào→ra,
+  // trừ giờ nghỉ giữa ca) so với 8 tiếng chuẩn — xem tinhChenhLechGio_() phía trên.
+  var chenhLechPhut = '';
+  if (loai === 'RA' && homNay.vao) {
+    var vaoPhut = phutTuChuoi_(homNay.vao.gio);
+    chenhLechPhut = tinhChenhLechGio_(vaoPhut, phutHienTai, ca, c);
+    if (chenhLechPhut < 0) {
+      ghiChu.push('Hôm nay làm thiếu ' + dur_(-chenhLechPhut) + ' so với 8 tiếng chuẩn, cần làm bù trong tháng.');
+    } else if (chenhLechPhut > 0) {
+      ghiChu.push('Hôm nay làm dư ' + dur_(chenhLechPhut) + ', đã trừ bớt nợ giờ làm bù nếu có.');
+    }
+  }
 
   // lưu ảnh rồi mới khoá ghi (giữ khoá càng ngắn càng tốt)
   var anhUrl = luuAnh_(req.anh,
@@ -595,7 +672,7 @@ function cham_(req) {
       ngay, tenThu_(now), nv.maNV, nv.hoTen, loai, gio, ca,
       phutTre || '', phutSom || '', viPham ? 'CO' : '',
       lanThu, tienQuy || '', khoangCach, sai || '', toaDo, anhUrl,
-      req.deviceId || '', ghiChu.join(' · ')
+      req.deviceId || '', ghiChu.join(' · '), chenhLechPhut
     ]);
     SpreadsheetApp.flush();
   } catch (err) {
@@ -609,6 +686,7 @@ function cham_(req) {
     ca: ca, mocCa: hhmm_(loai === 'VAO' ? mocVao : mocRa),
     lech: lech, viPham: viPham, lanThu: lanThu, tienQuy: tienQuy,
     nguong: nguong, khoangCach: khoangCach, ngoaiVung: ngoaiVung,
+    chenhLechPhut: chenhLechPhut,
     ghiChu: ghiChu, trangThai: trangThaiCuaNV_(nv)
   };
 }
