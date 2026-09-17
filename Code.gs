@@ -35,17 +35,22 @@
  * @OnlyCurrentDoc
  */
 
-var SHEET_NHANSU   = 'NHANSU';
-var SHEET_CHAMCONG = 'CHAMCONG';
-var SHEET_CAUHINH  = 'CAUHINH';
-var TEN_THU_MUC    = 'CHAM CONG - ANH';
-var TZ             = 'Asia/Ho_Chi_Minh';
+var SHEET_NHANSU     = 'NHANSU';
+var SHEET_CHAMCONG   = 'CHAMCONG';
+var SHEET_CAUHINH    = 'CAUHINH';
+var SHEET_DONXINPHEP = 'DONXINPHEP';
+var TEN_THU_MUC      = 'CHAM CONG - ANH';
+var TZ               = 'Asia/Ho_Chi_Minh';
 
 var COT_NHANSU   = ['MaNV','HoTen','Ca','PIN_TAM','PIN_HASH','Email','TrangThai','DeviceId','GhiChu'];
 var COT_CHAMCONG = ['Ngay','Thu','MaNV','HoTen','Loai','Gio','Ca','PhutTre','PhutVeSom','ViPham',
                     'LanThu','TienQuy','KhoangCach_m','DoChinhXac_m','ToaDo','AnhURL','DeviceId','GhiChu',
                     'ChenhLechPhut'];
 var COT_CAUHINH  = ['Khoa','GiaTri','MoTa'];
+// MaDon(1) NgayGui(2) GioGui(3) MaNV(4) HoTen(5) LoaiDon(6) NgayApDung(7) NgayApDungKetThuc(8)
+// ChiTiet(9) LyDo(10) TrangThai(11) NguoiDuyet(12) ThoiGianDuyet(13)
+var COT_DONXINPHEP = ['MaDon','NgayGui','GioGui','MaNV','HoTen','LoaiDon','NgayApDung','NgayApDungKetThuc',
+                      'ChiTiet','LyDo','TrangThai','NguoiDuyet','ThoiGianDuyet'];
 
 var CAUHINH_MAC_DINH = [
   ['office_lat',        '10.762622', 'Vĩ độ văn phòng (lấy từ Google Maps)'],
@@ -65,6 +70,7 @@ var CAUHINH_MAC_DINH = [
   ['ca_chieu_nghi_ra',  '18:00',     'Giờ hết nghỉ giữa ca chiều'],
   ['giu_anh_ngay',      '45',        'Ảnh chấm công cũ hơn số ngày này bị tự động xoá khỏi Drive (đã chốt lương xong)'],
   ['link_app',          'https://truelovemkt2025-creator.github.io/cham-cong/', 'Link app chấm công, dùng trong email nhắc chưa chấm công'],
+  ['email_truong_bo_phan', 'ngocdtb@lovejourney.vn', 'Email nhận đơn xin nghỉ/đi trễ/làm bù để duyệt (hiện dùng chung 1 người cho nhóm Telecell — mở rộng công ty sau cần tách theo từng phòng ban)'],
   ['thu_muc_anh_id',    '',          'Tự điền khi cài đặt lần đầu — id thư mục Drive lưu ảnh'],
   ['muoi_bam_pin',      '',          'Tự sinh khi cài đặt lần đầu — KHÔNG sửa, sửa là mọi PIN hỏng']
 ];
@@ -102,6 +108,10 @@ function caiDatLanDau() {
     shCC.getRange(1, COT_CHAMCONG.length).setValue(COT_CHAMCONG[COT_CHAMCONG.length - 1])
       .setFontWeight('bold').setBackground('#49469D').setFontColor('#FFFFFF');
   }
+
+  // Tab đơn xin nghỉ/đi trễ/làm bù — ép cột ngày (G,H) về dạng chữ như cột Ngay của CHAMCONG
+  var shDon = taoSheet_(ss, SHEET_DONXINPHEP, COT_DONXINPHEP);
+  shDon.getRange('G:H').setNumberFormat('@');
 
   var shCH = taoSheet_(ss, SHEET_CAUHINH, COT_CAUHINH);
   // Ép cột GiaTri về dạng chữ để Sheets KHÔNG đổi "09:00" thành kiểu giờ
@@ -228,6 +238,7 @@ function guiNhacChuaChamCong_() {
     var trangThai = String(v[i][6]).trim() || 'DANG_LAM';
     if (!maNV || trangThai !== 'DANG_LAM' || !email) continue;
     if (docChamCongHomNay_(maNV, homNay).vao) continue; // đã chấm vào rồi, bỏ qua
+    if (timDonDaDuyet_(maNV, homNay, 'NGHI_PHEP')) continue; // đã có đơn nghỉ phép được duyệt hôm nay, khỏi nhắc
 
     try {
       MailApp.sendEmail({
@@ -272,6 +283,171 @@ function guiNhacThuCong() {
   );
 }
 
+/*================= ĐƠN XIN NGHỈ / ĐI TRỄ / LÀM BÙ GIỜ =================*/
+/**
+ * 3 loại đơn (chọn ở app điện thoại, gửi trưởng bộ phận duyệt qua email — bấm nút
+ * Duyệt/Từ chối ngay trong email, không cần đăng nhập):
+ *  - NGHI_PHEP: xin nghỉ (cả ngày / nửa ngày sáng / nửa ngày chiều), có thể nhiều ngày liền.
+ *    Duyệt trước → app tự động KHÔNG gửi email nhắc "chưa chấm công" cho (các) ngày đó.
+ *  - DI_TRE: xin đi trễ 1 ngày cụ thể, kèm giờ dự kiến vào.
+ *    Duyệt TRƯỚC khi chấm công → hôm đó dù trễ vẫn KHÔNG tính vi phạm/nộp quỹ (nợ giờ làm bù
+ *    vẫn tính bình thường theo giờ làm thực tế, vì đó là nợ giờ chứ không phải kỷ luật).
+ *  - LAM_BU: báo trước sẽ làm bù giờ vào ngày nào — chỉ mang tính thông báo/ghi nhận cho
+ *    trưởng bộ phận nắm, không tự trừ nợ giờ (nợ giờ đã tự tính theo giờ làm thực tế sẵn).
+ */
+var LOAI_DON_TEXT = { NGHI_PHEP: 'Xin nghỉ phép', DI_TRE: 'Xin đi trễ', LAM_BU: 'Xin làm bù giờ' };
+function tenLoaiDon_(loaiDon) { return LOAI_DON_TEXT[loaiDon] || loaiDon; }
+
+function guiDon_(req) {
+  var maNV = maNVTuToken_(req.token);
+  if (!maNV) return {ok: false, ma: 'het_phien', loi: 'Phiên đã hết hạn, mời đăng nhập lại.'};
+  var nv = timNhanVien_(maNV);
+  if (!nv) return {ok: false, loi: 'Không tìm thấy nhân viên.'};
+
+  var loaiDon = String(req.loaiDon || '').toUpperCase();
+  if (!LOAI_DON_TEXT[loaiDon]) return {ok: false, loi: 'Loại đơn không hợp lệ.'};
+  var ngayApDung = ngayChuoi_(req.ngayApDung || '');
+  if (!ngayApDung) return {ok: false, loi: 'Chọn ngày áp dụng giúp em.'};
+  var ngayKetThuc = req.ngayApDungKetThuc ? ngayChuoi_(req.ngayApDungKetThuc) : ngayApDung;
+  var chiTiet = String(req.chiTiet || '').trim();
+  var lyDo = String(req.lyDo || '').trim();
+  if (!lyDo) return {ok: false, loi: 'Nhập lý do giúp em.'};
+
+  var c = docCauHinh_();
+  var maDon = Utilities.getUuid();
+  var now = new Date();
+
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(15000);
+    var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_DONXINPHEP);
+    sh.appendRow([
+      maDon, Utilities.formatDate(now, TZ, 'yyyy-MM-dd'), Utilities.formatDate(now, TZ, 'HH:mm:ss'),
+      nv.maNV, nv.hoTen, loaiDon, ngayApDung, ngayKetThuc, chiTiet, lyDo, 'CHO_DUYET', '', ''
+    ]);
+    SpreadsheetApp.flush();
+  } catch (err) {
+    return {ok: false, loi: 'Máy chủ đang bận, thử gửi lại giúp em: ' + err};
+  } finally {
+    try { lock.releaseLock(); } catch (e2) {}
+  }
+
+  if (c.email_truong_bo_phan) {
+    try { guiEmailDuyetDon_(maDon, nv, loaiDon, ngayApDung, ngayKetThuc, chiTiet, lyDo, c.email_truong_bo_phan); }
+    catch (err) { /* gửi mail lỗi không chặn việc lưu đơn — sếp vẫn thấy đơn trong Sheet */ }
+  }
+
+  return {ok: true, maDon: maDon};
+}
+
+function guiEmailDuyetDon_(maDon, nv, loaiDon, ngayApDung, ngayKetThuc, chiTiet, lyDo, emailDuyet) {
+  var baseUrl = ScriptApp.getService().getUrl();
+  var linkDuyet   = baseUrl + '?action=duyet&maDon=' + encodeURIComponent(maDon) + '&ketQua=duyet';
+  var linkTuChoi  = baseUrl + '?action=duyet&maDon=' + encodeURIComponent(maDon) + '&ketQua=tuchoi';
+  var ngayDong = ngayApDung === ngayKetThuc ? ngayApDung : (ngayApDung + ' → ' + ngayKetThuc);
+
+  var chiTietDong;
+  if (loaiDon === 'DI_TRE') chiTietDong = 'Giờ dự kiến vào: <b>' + (chiTiet || '—') + '</b>';
+  else if (loaiDon === 'LAM_BU') chiTietDong = 'Dự kiến làm bù: <b>' + (chiTiet || '—') + '</b>';
+  else chiTietDong = 'Loại nghỉ: <b>' + ({ca_ngay:'Cả ngày', nua_ngay_sang:'Nửa ngày sáng', nua_ngay_chieu:'Nửa ngày chiều'}[chiTiet] || chiTiet || 'Cả ngày') + '</b>';
+
+  var html =
+    '<div style="font-family:Arial,sans-serif;max-width:480px">' +
+    '<h2 style="margin:0 0 12px">' + tenLoaiDon_(loaiDon) + '</h2>' +
+    '<p><b>' + nv.hoTen + '</b> (' + nv.maNV + ') gửi đơn:</p>' +
+    '<p>Ngày áp dụng: <b>' + ngayDong + '</b><br>' + chiTietDong + '<br>Lý do: ' + lyDo + '</p>' +
+    '<table cellpadding="0" cellspacing="0"><tr>' +
+    '<td style="padding-right:12px"><a href="' + linkDuyet + '" style="display:inline-block;padding:12px 22px;background:#177A4B;color:#fff;text-decoration:none;border-radius:8px;font-weight:bold">Duyệt</a></td>' +
+    '<td><a href="' + linkTuChoi + '" style="display:inline-block;padding:12px 22px;background:#B42F2C;color:#fff;text-decoration:none;border-radius:8px;font-weight:bold">Từ chối</a></td>' +
+    '</tr></table>' +
+    '<p style="color:#888;font-size:12px;margin-top:16px">Bấm 1 trong 2 nút trên điện thoại/máy tính là xong, không cần đăng nhập gì thêm.</p>' +
+    '</div>';
+
+  MailApp.sendEmail({
+    to: emailDuyet,
+    subject: tenLoaiDon_(loaiDon) + ' — ' + nv.hoTen + ' (' + ngayDong + ')',
+    htmlBody: html,
+    body: tenLoaiDon_(loaiDon) + ' - ' + nv.hoTen + ' - ngày ' + ngayDong + ' - Lý do: ' + lyDo + '. Mở email bằng ứng dụng hỗ trợ HTML để bấm nút Duyệt/Từ chối.'
+  });
+}
+
+/** Trưởng bộ phận bấm nút trong email → gọi vào đây qua doGet (GET, không cần đăng nhập) */
+function xuLyDuyetDon_(maDon, ketQua) {
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_DONXINPHEP);
+  if (!sh || sh.getLastRow() < 2) return {ok: false, loi: 'Không tìm thấy đơn.'};
+  var lock = LockService.getScriptLock();
+  var ketQuaTra = null;
+  try {
+    lock.waitLock(15000);
+    var v = sh.getRange(2, 1, sh.getLastRow() - 1, COT_DONXINPHEP.length).getValues();
+    for (var i = 0; i < v.length; i++) {
+      if (String(v[i][0]) === maDon) {
+        var trangThaiHienTai = String(v[i][10]);
+        if (trangThaiHienTai !== 'CHO_DUYET') {
+          ketQuaTra = {ok: false, daXuLy: true, trangThai: trangThaiHienTai, loaiDon: String(v[i][5]), hoTen: String(v[i][4])};
+          break;
+        }
+        var trangThaiMoi = ketQua === 'duyet' ? 'DA_DUYET' : 'TU_CHOI';
+        sh.getRange(i + 2, 11).setValue(trangThaiMoi);
+        sh.getRange(i + 2, 12).setValue('Trưởng bộ phận');
+        sh.getRange(i + 2, 13).setValue(Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd HH:mm:ss'));
+        ketQuaTra = {ok: true, trangThai: trangThaiMoi, loaiDon: String(v[i][5]), hoTen: String(v[i][4]), ngayApDung: String(v[i][6])};
+        break;
+      }
+    }
+    SpreadsheetApp.flush();
+  } finally {
+    try { lock.releaseLock(); } catch (e2) {}
+  }
+  return ketQuaTra || {ok: false, loi: 'Không tìm thấy đơn này — có thể link đã cũ.'};
+}
+
+/** Trang HTML nhỏ hiện ra khi bấm nút Duyệt/Từ chối trong email */
+function trangDuyetDon_(maDon, ketQua) {
+  var tieuDe, mauSac, noiDung;
+  if (!maDon || (ketQua !== 'duyet' && ketQua !== 'tuchoi')) {
+    tieuDe = 'Đường dẫn không hợp lệ'; mauSac = '#B42F2C'; noiDung = 'Link bị thiếu thông tin, thử mở lại từ email.';
+  } else {
+    var kq = xuLyDuyetDon_(maDon, ketQua);
+    if (kq.daXuLy) {
+      tieuDe = 'Đơn này đã được xử lý trước đó'; mauSac = '#8E650A';
+      noiDung = tenLoaiDon_(kq.loaiDon) + ' của ' + kq.hoTen + ' — trạng thái hiện tại: ' +
+        (kq.trangThai === 'DA_DUYET' ? 'Đã duyệt' : 'Đã từ chối') + '.';
+    } else if (!kq.ok) {
+      tieuDe = 'Không tìm thấy đơn'; mauSac = '#B42F2C'; noiDung = kq.loi;
+    } else {
+      var xong = kq.trangThai === 'DA_DUYET';
+      tieuDe = xong ? 'Đã duyệt' : 'Đã từ chối';
+      mauSac = xong ? '#177A4B' : '#B42F2C';
+      noiDung = tenLoaiDon_(kq.loaiDon) + ' của <b>' + kq.hoTen + '</b> ngày ' + kq.ngayApDung + ' — ' + (xong ? 'đã duyệt.' : 'đã từ chối.');
+    }
+  }
+  var html = '<!DOCTYPE html><html lang="vi"><head><meta charset="utf-8">' +
+    '<meta name="viewport" content="width=device-width,initial-scale=1"><title>' + tieuDe + '</title></head>' +
+    '<body style="font-family:Arial,sans-serif;background:#F4F3F8;margin:0;padding:40px 20px;text-align:center">' +
+    '<div style="max-width:420px;margin:0 auto;background:#fff;border-radius:16px;padding:28px 22px;box-shadow:0 2px 10px rgba(0,0,0,.06)">' +
+    '<h2 style="color:' + mauSac + ';margin:0 0 12px">' + tieuDe + '</h2>' +
+    '<p style="color:#333;line-height:1.6">' + noiDung + '</p>' +
+    '</div></body></html>';
+  return HtmlService.createHtmlOutput(html).setTitle(tieuDe);
+}
+
+/** Đơn NGHI_PHEP hoặc DI_TRE đã DA_DUYET áp dụng cho đúng ngày này (nếu có) */
+function timDonDaDuyet_(maNV, ngay, loaiDon) {
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_DONXINPHEP);
+  if (!sh || sh.getLastRow() < 2) return null;
+  var v = sh.getRange(2, 1, sh.getLastRow() - 1, COT_DONXINPHEP.length).getValues();
+  for (var i = 0; i < v.length; i++) {
+    if (String(v[i][3]).toUpperCase() === maNV.toUpperCase() &&
+        String(v[i][5]) === loaiDon &&
+        String(v[i][10]) === 'DA_DUYET' &&
+        ngayChuoi_(v[i][6]) <= ngay && ngay <= ngayChuoi_(v[i][7])) {
+      return {chiTiet: v[i][8], lyDo: v[i][9]};
+    }
+  }
+  return null;
+}
+
 function themNhanVienMau() {
   var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NHANSU);
   if (!sh) { SpreadsheetApp.getUi().alert('Chạy "Cài đặt lần đầu" trước đã.'); return; }
@@ -303,6 +479,12 @@ function kiemTraCauHinh() {
   var soNV = sh ? Math.max(0, sh.getLastRow() - 1) : 0;
   var coTrigger = ScriptApp.getProjectTriggers().some(function(t){ return t.getHandlerFunction() === 'chayTuDongDonDep'; });
   var coTriggerNhac = ScriptApp.getProjectTriggers().some(function(t){ return t.getHandlerFunction() === 'chayTuDongNhacChuaChamCong'; });
+  var shDon = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_DONXINPHEP);
+  var soDonChoDuyet = 0;
+  if (shDon && shDon.getLastRow() >= 2) {
+    var vDon = shDon.getRange(2, 11, shDon.getLastRow() - 1, 1).getValues();
+    vDon.forEach(function(r){ if (String(r[0]) === 'CHO_DUYET') soDonChoDuyet++; });
+  }
 
   SpreadsheetApp.getUi().alert(
     'CẤU HÌNH HIỆN TẠI\n\n' +
@@ -311,6 +493,7 @@ function kiemTraCauHinh() {
     'Ngưỡng trễ: ' + c.nguong_tre_phut + ' phút · Quỹ: ' + c.muc_quy_lan_1_3 + 'đ (lần 1-3), ' + c.muc_quy_tu_lan_4 + 'đ (từ lần 4)\n' +
     'Giữ ảnh: ' + (c.giu_anh_ngay || 45) + ' ngày · Tự động dọn ảnh: ' + (coTrigger ? '✅ ĐÃ BẬT' : '⚠️ CHƯA BẬT') + '\n' +
     'Tự động nhắc chưa chấm công (13h, trừ CN): ' + (coTriggerNhac ? '✅ ĐÃ BẬT' : '⚠️ CHƯA BẬT') + '\n' +
+    'Email duyệt đơn: ' + (c.email_truong_bo_phan || '(chưa điền)') + ' · Đơn chờ duyệt: ' + soDonChoDuyet + '\n' +
     'Số nhân viên: ' + soNV + '\n\n' +
     (thieu.length ? ('⚠️ CÒN THIẾU:\n· ' + thieu.join('\n· ')) : '✅ Đủ điều kiện chạy.')
   );
@@ -556,6 +739,7 @@ function maNVTuToken_(token) {
 function doGet(e) {
   var act = (e && e.parameter && e.parameter.action) || 'ping';
   if (act === 'ping') return json_(ping_());
+  if (act === 'duyet') return trangDuyetDon_(e.parameter.maDon, e.parameter.ketQua);
   return json_({ok: false, loi: 'Dùng POST cho thao tác này.'});
 }
 
@@ -568,6 +752,7 @@ function doPost(e) {
       case 'login':     kq = login_(req); break;
       case 'trangthai': kq = trangThai_(req); break;
       case 'cham':      kq = cham_(req); break;
+      case 'guidon':    kq = guiDon_(req); break;
       default:          kq = {ok: false, loi: 'Không rõ action: ' + req.action};
     }
   } catch (err) {
@@ -709,9 +894,13 @@ function cham_(req) {
     ngoaiVung = true;
   }
 
-  // vi phạm + quỹ luỹ tiến (kỷ luật đi trễ/về sớm — tính bất kể có bù giờ hay không)
+  // vi phạm + quỹ luỹ tiến (kỷ luật đi trễ/về sớm — tính bất kể có bù giờ hay không),
+  // TRỪ KHI có đơn "xin đi trễ" cho đúng ngày này đã được trưởng bộ phận duyệt trước.
   var viPham = lech >= nguong;
+  var donDiTreDaDuyet = (loai === 'VAO' && viPham) ? timDonDaDuyet_(nv.maNV, ngay, 'DI_TRE') : null;
+  if (donDiTreDaDuyet) viPham = false;
   var lanThu = '', tienQuy = 0, ghiChu = [];
+  if (donDiTreDaDuyet) ghiChu.push('Đã có đơn xin đi trễ được duyệt trước, miễn nộp quỹ lần này.');
   if (viPham) {
     var thang = demViPhamThang_(nv.maNV, Utilities.formatDate(now, TZ, 'yyyy-MM'));
     lanThu  = thang.soLan + 1;

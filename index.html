@@ -30,11 +30,19 @@ h1{font-size:22px;font-weight:800;margin:0 0 4px}
 .sub{color:var(--muted);font-size:14px;margin:0 0 20px}
 .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
 label{display:block;font-size:13px;font-weight:600;color:var(--ink-2);margin:14px 0 6px}
-input[type=text],input[type=tel],input[type=password]{
+input[type=text],input[type=tel],input[type=password],input[type=date],input[type=time],select,textarea{
   width:100%;min-height:54px;border:1.5px solid var(--line);border-radius:14px;background:var(--surface);
   color:var(--ink);font-family:var(--sans);font-size:17px;padding:0 16px;outline:none}
-input:focus{border-color:#49469D}
+input:focus,select:focus,textarea:focus{border-color:#49469D}
 input.pin{font-family:var(--mono);letter-spacing:.5em;text-align:center;font-size:22px}
+textarea{min-height:88px;padding:12px 16px;resize:vertical;line-height:1.4}
+.tabs{display:flex;gap:8px;margin:16px 0 4px}
+.tabs .tab{flex:1;border:1.5px solid var(--line);background:var(--surface);border-radius:12px;padding:10px 4px;
+  font-family:var(--sans);font-size:12.5px;font-weight:700;color:var(--muted);cursor:pointer}
+.tabs .tab.on{background:var(--grad);color:#fff;border-color:transparent}
+.donCard{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-top:10px}
+.donCard .row{font-size:13px}
+.donCard .row+.row{margin-top:4px}
 .btn{width:100%;min-height:56px;border:0;border-radius:16px;background:var(--grad);color:#fff;font-family:var(--sans);
   font-weight:700;font-size:17px;display:flex;align-items:center;justify-content:center;gap:10px;cursor:pointer}
 .btn:active{transform:scale(.99)}
@@ -139,7 +147,57 @@ input.pin{font-family:var(--mono);letter-spacing:.5em;text-align:center;font-siz
       <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.5" fill="none" stroke="#fff" stroke-width="2"/></svg>
       <span id="btnChamLabel">Chụp ảnh chấm vào</span>
     </button>
+    <button class="btn ghost" id="btnXinPhep" style="margin-top:10px">Xin nghỉ / đi trễ / làm bù giờ</button>
     <p class="foot">Ảnh chụp trực tiếp trong app, không chọn được ảnh có sẵn.</p>
+  </section>
+
+  <!-- XIN PHÉP -->
+  <section class="screen" id="s-don">
+    <div class="row">
+      <h1 style="margin:0;font-size:20px">Xin phép</h1>
+      <button class="btn ghost" style="width:auto;min-height:38px;padding:0 14px;font-size:13px" id="btnDonThoat">Đóng</button>
+    </div>
+    <p class="sub">Gửi trưởng bộ phận duyệt qua email</p>
+
+    <div class="tabs" id="donTabs">
+      <button class="tab on" type="button" data-loai="NGHI_PHEP">Nghỉ phép</button>
+      <button class="tab" type="button" data-loai="DI_TRE">Đi trễ</button>
+      <button class="tab" type="button" data-loai="LAM_BU">Làm bù giờ</button>
+    </div>
+
+    <div id="donFieldsNGHI_PHEP">
+      <label for="donTuNgay">Từ ngày</label>
+      <input type="date" id="donTuNgay">
+      <label for="donDenNgay">Đến ngày (để trống nếu nghỉ 1 ngày)</label>
+      <input type="date" id="donDenNgay">
+      <label for="donLoaiNghi">Loại nghỉ</label>
+      <select id="donLoaiNghi">
+        <option value="ca_ngay">Cả ngày</option>
+        <option value="nua_ngay_sang">Nửa ngày sáng</option>
+        <option value="nua_ngay_chieu">Nửa ngày chiều</option>
+      </select>
+    </div>
+
+    <div id="donFieldsDI_TRE" style="display:none">
+      <label for="donNgayTre">Ngày xin đi trễ</label>
+      <input type="date" id="donNgayTre">
+      <label for="donGioTre">Giờ dự kiến vào</label>
+      <input type="time" id="donGioTre">
+    </div>
+
+    <div id="donFieldsLAM_BU" style="display:none">
+      <label for="donNgayBu">Ngày sẽ làm bù</label>
+      <input type="date" id="donNgayBu">
+      <label for="donSoLuongBu">Dự kiến làm bù (VD: 1 giờ)</label>
+      <input type="text" id="donSoLuongBu" placeholder="VD: 1 giờ">
+    </div>
+
+    <label for="donLyDo">Lý do</label>
+    <textarea id="donLyDo" placeholder="Nhập lý do…"></textarea>
+
+    <div class="msg err" id="donErr"></div>
+    <div class="spacer"></div>
+    <button class="btn" id="btnGuiDon">Gửi đơn</button>
   </section>
 
   <!-- CAMERA -->
@@ -185,7 +243,7 @@ var S = { token:'', maNV:'', hoTen:'', loai:'VAO', anh:'', viTri:null, lechGio:0
 
 /*=============== TIỆN ÍCH ===============*/
 function man(id){
-  ['s-login','s-home','s-cam','s-kq'].forEach(function(x){ $(x).classList.toggle('on', x===id); });
+  ['s-login','s-home','s-cam','s-kq','s-don'].forEach(function(x){ $(x).classList.toggle('on', x===id); });
   window.scrollTo(0,0);
 }
 function bao(el, text, loai){
@@ -411,6 +469,59 @@ function veKetQua(r){
   man('s-kq');
   $('btnVeHome').addEventListener('click', function(){ veHome(r.trangThai); });
 }
+
+/*=============== XIN PHÉP (nghỉ / đi trễ / làm bù giờ) ===============*/
+S.loaiDon = 'NGHI_PHEP';
+
+$('btnXinPhep').addEventListener('click', function(){
+  bao($('donErr'), '');
+  man('s-don');
+});
+$('btnDonThoat').addEventListener('click', function(){ man('s-home'); });
+
+Array.prototype.forEach.call(document.querySelectorAll('#donTabs .tab'), function(btn){
+  btn.addEventListener('click', function(){
+    Array.prototype.forEach.call(document.querySelectorAll('#donTabs .tab'), function(b){ b.classList.remove('on'); });
+    btn.classList.add('on');
+    S.loaiDon = btn.getAttribute('data-loai');
+    ['NGHI_PHEP','DI_TRE','LAM_BU'].forEach(function(l){
+      $('donFields' + l).style.display = (l === S.loaiDon) ? '' : 'none';
+    });
+  });
+});
+
+$('btnGuiDon').addEventListener('click', function(){
+  var lyDo = $('donLyDo').value.trim();
+  if (!lyDo) { bao($('donErr'), 'Nhập lý do giúp em.'); return; }
+  var payload = {action:'guidon', token:S.token, loaiDon:S.loaiDon, lyDo:lyDo};
+
+  if (S.loaiDon === 'NGHI_PHEP') {
+    var tu = $('donTuNgay').value, den = $('donDenNgay').value || tu;
+    if (!tu) { bao($('donErr'), 'Chọn ngày bắt đầu nghỉ.'); return; }
+    payload.ngayApDung = tu; payload.ngayApDungKetThuc = den; payload.chiTiet = $('donLoaiNghi').value;
+  } else if (S.loaiDon === 'DI_TRE') {
+    var ngayTre = $('donNgayTre').value, gioTre = $('donGioTre').value;
+    if (!ngayTre || !gioTre) { bao($('donErr'), 'Chọn ngày và giờ dự kiến vào.'); return; }
+    payload.ngayApDung = ngayTre; payload.chiTiet = gioTre;
+  } else {
+    var ngayBu = $('donNgayBu').value, soLuong = $('donSoLuongBu').value.trim();
+    if (!ngayBu || !soLuong) { bao($('donErr'), 'Chọn ngày và ghi số giờ dự kiến làm bù.'); return; }
+    payload.ngayApDung = ngayBu; payload.chiTiet = soLuong;
+  }
+
+  bao($('donErr'), '');
+  tai(true, 'Đang gửi đơn…');
+  goi(payload).then(function(r){
+    tai(false);
+    if (!r.ok && r.ma === 'het_phien') { man('s-login'); bao($('loginErr'), 'Phiên hết hạn, đăng nhập lại giúp em.'); return; }
+    if (!r.ok) { bao($('donErr'), r.loi || 'Chưa gửi được, thử lại giúp em.'); return; }
+    $('donLyDo').value = '';
+    alert('Đã gửi đơn, chờ trưởng bộ phận duyệt qua email nhé!');
+    man('s-home');
+  }).catch(function(e){
+    tai(false); bao($('donErr'), 'Không gửi được, kiểm tra mạng rồi thử lại. (' + e + ')');
+  });
+});
 
 /*=============== KHỞI ĐỘNG ===============*/
 (function(){
