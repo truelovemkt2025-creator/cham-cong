@@ -391,7 +391,9 @@ function xuLyDuyetDon_(maDon, ketQua) {
         sh.getRange(i + 2, 11).setValue(trangThaiMoi);
         sh.getRange(i + 2, 12).setValue('Trưởng bộ phận');
         sh.getRange(i + 2, 13).setValue(Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd HH:mm:ss'));
-        ketQuaTra = {ok: true, trangThai: trangThaiMoi, loaiDon: String(v[i][5]), hoTen: String(v[i][4]), ngayApDung: String(v[i][6])};
+        // ngayChuoi_() vì cột NgayApDung có thể đã bị Sheets tự đổi sang kiểu Date dù đã ép '@' —
+        // String() thẳng ra sẽ hiện dạng "Thu Sep 17 2026 00:00:00 GMT+0700" rất khó đọc.
+        ketQuaTra = {ok: true, trangThai: trangThaiMoi, loaiDon: String(v[i][5]), hoTen: String(v[i][4]), ngayApDung: ngayChuoi_(v[i][6])};
         break;
       }
     }
