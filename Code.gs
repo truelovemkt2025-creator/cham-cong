@@ -947,6 +947,13 @@ function cham_(req) {
     try { lock.releaseLock(); } catch (e2) {}
   }
 
+  // Chấm công ngoài vùng văn phòng (hoặc GPS sai số lớn) → báo ngay cho chính nhân viên
+  // qua email, để họ chủ động nhắn trưởng bộ phận giải trình nếu cần. Gửi lỗi không
+  // chặn kết quả chấm công (nhân viên vẫn thấy kết quả bình thường).
+  if (ngoaiVung && nv.email) {
+    try { guiEmailNgoaiVung_(nv, loai, gio, khoangCach, sai, c); } catch (err) { /* bỏ qua, không chặn */ }
+  }
+
   return {
     ok: true, loai: loai, gio: Utilities.formatDate(now, TZ, 'HH:mm'), giayPhut: gio,
     ca: ca, mocCa: hhmm_(loai === 'VAO' ? mocVao : mocRa),
@@ -955,4 +962,24 @@ function cham_(req) {
     chenhLechPhut: chenhLechPhut,
     ghiChu: ghiChu, trangThai: trangThaiCuaNV_(nv)
   };
+}
+
+/** Báo ngay cho nhân viên khi lượt chấm công của họ bị gắn cờ ngoài vùng văn phòng /
+ * GPS sai số lớn — chỉ để thông báo, nhân viên tự nhắn trưởng bộ phận giải trình nếu cần
+ * (app chưa có luồng "chỉnh lại" vì đây là vị trí thực tế ghi nhận lúc chấm, không sửa ngược được). */
+function guiEmailNgoaiVung_(nv, loai, gio, khoangCach, sai, c) {
+  var viTriDong = (khoangCach !== '' && khoangCach !== undefined)
+    ? ('Cách văn phòng khoảng ' + khoangCach + ' m' + (sai ? (' · GPS sai số ±' + sai + ' m') : ''))
+    : 'Điện thoại không lấy được vị trí (GPS tắt hoặc không cấp quyền).';
+
+  MailApp.sendEmail({
+    to: nv.email,
+    subject: '⚠️ Chấm công ngoài vùng văn phòng — ' + nv.hoTen,
+    body:
+      'Chào ' + nv.hoTen + ',\n\n' +
+      'Lượt chấm ' + (loai === 'VAO' ? 'VÀO' : 'RA') + ' lúc ' + gio + ' hôm nay bị hệ thống ghi nhận NGOÀI VÙNG văn phòng.\n' +
+      viTriDong + '\n\n' +
+      'Nếu đây là nhầm lẫn (định vị điện thoại không chính xác) hoặc bạn có lý do chính đáng, nhắn trực tiếp cho trưởng bộ phận để được xác nhận nhé. Dữ liệu chấm công vẫn được ghi nhận bình thường, email này chỉ để bạn biết sớm.\n\n' +
+      '— App Chấm Công True Love (email tự động, không trả lời email này)'
+  });
 }
