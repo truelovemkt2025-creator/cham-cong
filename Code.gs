@@ -42,7 +42,7 @@ var SHEET_DONXINPHEP = 'DONXINPHEP';
 var TEN_THU_MUC      = 'CHAM CONG - ANH';
 var TZ               = 'Asia/Ho_Chi_Minh';
 
-var COT_NHANSU   = ['MaNV','HoTen','Ca','PIN_TAM','PIN_HASH','Email','TrangThai','DeviceId','GhiChu'];
+var COT_NHANSU   = ['MaNV','HoTen','Ca','PIN_TAM','PIN_HASH','Email','TrangThai','DeviceId','GhiChu','PhongBan'];
 var COT_CHAMCONG = ['Ngay','Thu','MaNV','HoTen','Loai','Gio','Ca','PhutTre','PhutVeSom','ViPham',
                     'LanThu','TienQuy','KhoangCach_m','DoChinhXac_m','ToaDo','AnhURL','DeviceId','GhiChu',
                     'ChenhLechPhut'];
@@ -70,7 +70,8 @@ var CAUHINH_MAC_DINH = [
   ['ca_chieu_nghi_ra',  '18:00',     'Giờ hết nghỉ giữa ca chiều'],
   ['giu_anh_ngay',      '45',        'Ảnh chấm công cũ hơn số ngày này bị tự động xoá khỏi Drive (đã chốt lương xong)'],
   ['link_app',          'https://truelovemkt2025-creator.github.io/cham-cong/', 'Link app chấm công, dùng trong email nhắc chưa chấm công'],
-  ['email_truong_bo_phan', 'ngocdtb@lovejourney.vn', 'Email nhận đơn xin nghỉ/đi trễ/làm bù để duyệt (hiện dùng chung 1 người cho nhóm Telecell — mở rộng công ty sau cần tách theo từng phòng ban)'],
+  ['email_truong_bo_phan', 'ngocdtb@lovejourney.vn', 'Email duyệt đơn xin nghỉ/đi trễ/làm bù — CHỈ áp dụng cho nhân viên có PhongBan = "Kinh Doanh" trong NHANSU'],
+  ['email_truong_bo_phan_khac', 'lienpham@lovejourney.vn', 'Email duyệt đơn xin nghỉ/đi trễ/làm bù cho TẤT CẢ nhân viên KHÔNG thuộc phòng Kinh Doanh (sếp Liên duyệt)'],
   ['thu_muc_anh_id',    '',          'Tự điền khi cài đặt lần đầu — id thư mục Drive lưu ảnh'],
   ['muoi_bam_pin',      '',          'Tự sinh khi cài đặt lần đầu — KHÔNG sửa, sửa là mọi PIN hỏng']
 ];
@@ -96,7 +97,13 @@ function onOpen() {
 /*================= CÀI ĐẶT =================*/
 function caiDatLanDau() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  taoSheet_(ss, SHEET_NHANSU, COT_NHANSU);
+  var shNS = taoSheet_(ss, SHEET_NHANSU, COT_NHANSU);
+  // Nếu NHANSU có từ bản cũ (thiếu cột PhongBan mới thêm) thì bổ sung đúng ô tiêu đề
+  // còn thiếu ở cuối, không đụng gì tới dữ liệu các dòng đã có.
+  if (shNS.getLastColumn() < COT_NHANSU.length) {
+    shNS.getRange(1, COT_NHANSU.length).setValue(COT_NHANSU[COT_NHANSU.length - 1])
+      .setFontWeight('bold').setBackground('#49469D').setFontColor('#FFFFFF');
+  }
   var shCC = taoSheet_(ss, SHEET_CHAMCONG, COT_CHAMCONG);
   // Ép cột Ngày (A) và Giờ (F) về dạng chữ, nếu không Sheets đổi sang kiểu ngày/giờ
   // làm việc đếm vi phạm trong tháng và kiểm tra "hôm nay đã chấm chưa" bị sai.
@@ -332,8 +339,10 @@ function guiDon_(req) {
     try { lock.releaseLock(); } catch (e2) {}
   }
 
-  if (c.email_truong_bo_phan) {
-    try { guiEmailDuyetDon_(maDon, nv, loaiDon, ngayApDung, ngayKetThuc, chiTiet, lyDo, c.email_truong_bo_phan); }
+  // Kinh Doanh (Telecell) do chị Ngọc duyệt; mọi phòng ban khác do sếp Liên duyệt.
+  var emailDuyet = (nv.phongBan === 'Kinh Doanh') ? c.email_truong_bo_phan : c.email_truong_bo_phan_khac;
+  if (emailDuyet) {
+    try { guiEmailDuyetDon_(maDon, nv, loaiDon, ngayApDung, ngayKetThuc, chiTiet, lyDo, emailDuyet); }
     catch (err) { /* gửi mail lỗi không chặn việc lưu đơn — sếp vẫn thấy đơn trong Sheet */ }
   }
 
@@ -495,7 +504,7 @@ function kiemTraCauHinh() {
     'Ngưỡng trễ: ' + c.nguong_tre_phut + ' phút · Quỹ: ' + c.muc_quy_lan_1_3 + 'đ (lần 1-3), ' + c.muc_quy_tu_lan_4 + 'đ (từ lần 4)\n' +
     'Giữ ảnh: ' + (c.giu_anh_ngay || 45) + ' ngày · Tự động dọn ảnh: ' + (coTrigger ? '✅ ĐÃ BẬT' : '⚠️ CHƯA BẬT') + '\n' +
     'Tự động nhắc chưa chấm công (13h, trừ CN): ' + (coTriggerNhac ? '✅ ĐÃ BẬT' : '⚠️ CHƯA BẬT') + '\n' +
-    'Email duyệt đơn: ' + (c.email_truong_bo_phan || '(chưa điền)') + ' · Đơn chờ duyệt: ' + soDonChoDuyet + '\n' +
+    'Email duyệt đơn — Kinh Doanh: ' + (c.email_truong_bo_phan || '(chưa điền)') + ' · Khác: ' + (c.email_truong_bo_phan_khac || '(chưa điền)') + ' · Đơn chờ duyệt: ' + soDonChoDuyet + '\n' +
     'Số nhân viên: ' + soNV + '\n\n' +
     (thieu.length ? ('⚠️ CÒN THIẾU:\n· ' + thieu.join('\n· ')) : '✅ Đủ điều kiện chạy.')
   );
@@ -625,7 +634,7 @@ function timNhanVien_(maNV) {
         ca: String(v[i][2]).trim().toLowerCase() || 'auto',
         pinTam: String(v[i][3]).trim(), pinHash: String(v[i][4]).trim(),
         email: String(v[i][5]).trim(), trangThai: String(v[i][6]).trim() || 'DANG_LAM',
-        deviceId: String(v[i][7]).trim(), sheet: sh
+        deviceId: String(v[i][7]).trim(), phongBan: String(v[i][9] || '').trim(), sheet: sh
       };
     }
   }
@@ -898,12 +907,16 @@ function cham_(req) {
 
   // vi phạm + quỹ luỹ tiến (kỷ luật đi trễ/về sớm — tính bất kể có bù giờ hay không),
   // TRỪ KHI có đơn "xin đi trễ / về sớm" cho đúng ngày này đã được trưởng bộ phận duyệt trước
-  // (áp dụng cho cả lượt VÀO trễ lẫn lượt RA sớm, vì 2 việc dùng chung 1 bộ đếm vi phạm).
-  var viPham = lech >= nguong;
+  // (áp dụng cho cả lượt VÀO trễ lẫn lượt RA sớm, vì 2 việc dùng chung 1 bộ đếm vi phạm),
+  // VÀ TRỪ Chủ nhật — đi làm CN là do sắp xếp riêng/có nghỉ bù, không theo ca chuẩn nên
+  // không áp dụng luật trễ/về sớm của ngày thường (nếu không sẽ bị tính "về sớm" oan).
+  var laChuNhat = tenThu_(now) === 'CN';
+  var viPham = !laChuNhat && (lech >= nguong);
   var donDiTreDaDuyet = viPham ? timDonDaDuyet_(nv.maNV, ngay, 'DI_TRE') : null;
   if (donDiTreDaDuyet) viPham = false;
   var lanThu = '', tienQuy = 0, ghiChu = [];
   if (donDiTreDaDuyet) ghiChu.push('Đã có đơn xin đi trễ/về sớm được duyệt trước, miễn nộp quỹ lần này.');
+  if (laChuNhat && lech >= nguong) ghiChu.push('Chủ nhật — không áp dụng luật trễ/về sớm.');
   if (viPham) {
     var thang = demViPhamThang_(nv.maNV, Utilities.formatDate(now, TZ, 'yyyy-MM'));
     lanThu  = thang.soLan + 1;
