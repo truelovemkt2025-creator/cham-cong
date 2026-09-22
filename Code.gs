@@ -289,13 +289,13 @@ function guiNhacThuCong() {
  * Duyệt/Từ chối ngay trong email, không cần đăng nhập):
  *  - NGHI_PHEP: xin nghỉ (cả ngày / nửa ngày sáng / nửa ngày chiều), có thể nhiều ngày liền.
  *    Duyệt trước → app tự động KHÔNG gửi email nhắc "chưa chấm công" cho (các) ngày đó.
- *  - DI_TRE: xin đi trễ 1 ngày cụ thể, kèm giờ dự kiến vào.
- *    Duyệt TRƯỚC khi chấm công → hôm đó dù trễ vẫn KHÔNG tính vi phạm/nộp quỹ (nợ giờ làm bù
+ *  - DI_TRE: xin đi trễ HOẶC về sớm 1 ngày cụ thể (chọn loại + giờ dự kiến trên app).
+ *    Duyệt TRƯỚC khi chấm công → hôm đó dù trễ/sớm vẫn KHÔNG tính vi phạm/nộp quỹ (nợ giờ làm bù
  *    vẫn tính bình thường theo giờ làm thực tế, vì đó là nợ giờ chứ không phải kỷ luật).
  *  - LAM_BU: báo trước sẽ làm bù giờ vào ngày nào — chỉ mang tính thông báo/ghi nhận cho
  *    trưởng bộ phận nắm, không tự trừ nợ giờ (nợ giờ đã tự tính theo giờ làm thực tế sẵn).
  */
-var LOAI_DON_TEXT = { NGHI_PHEP: 'Xin nghỉ phép', DI_TRE: 'Xin đi trễ', LAM_BU: 'Xin làm bù giờ' };
+var LOAI_DON_TEXT = { NGHI_PHEP: 'Xin nghỉ phép', DI_TRE: 'Xin đi trễ / về sớm', LAM_BU: 'Xin làm bù giờ' };
 function tenLoaiDon_(loaiDon) { return LOAI_DON_TEXT[loaiDon] || loaiDon; }
 
 function guiDon_(req) {
@@ -347,7 +347,7 @@ function guiEmailDuyetDon_(maDon, nv, loaiDon, ngayApDung, ngayKetThuc, chiTiet,
   var ngayDong = ngayApDung === ngayKetThuc ? ngayApDung : (ngayApDung + ' → ' + ngayKetThuc);
 
   var chiTietDong;
-  if (loaiDon === 'DI_TRE') chiTietDong = 'Giờ dự kiến vào: <b>' + (chiTiet || '—') + '</b>';
+  if (loaiDon === 'DI_TRE') chiTietDong = 'Chi tiết: <b>' + (chiTiet || '—') + '</b>';
   else if (loaiDon === 'LAM_BU') chiTietDong = 'Dự kiến làm bù: <b>' + (chiTiet || '—') + '</b>';
   else chiTietDong = 'Loại nghỉ: <b>' + ({ca_ngay:'Cả ngày', nua_ngay_sang:'Nửa ngày sáng', nua_ngay_chieu:'Nửa ngày chiều'}[chiTiet] || chiTiet || 'Cả ngày') + '</b>';
 
@@ -897,12 +897,13 @@ function cham_(req) {
   }
 
   // vi phạm + quỹ luỹ tiến (kỷ luật đi trễ/về sớm — tính bất kể có bù giờ hay không),
-  // TRỪ KHI có đơn "xin đi trễ" cho đúng ngày này đã được trưởng bộ phận duyệt trước.
+  // TRỪ KHI có đơn "xin đi trễ / về sớm" cho đúng ngày này đã được trưởng bộ phận duyệt trước
+  // (áp dụng cho cả lượt VÀO trễ lẫn lượt RA sớm, vì 2 việc dùng chung 1 bộ đếm vi phạm).
   var viPham = lech >= nguong;
-  var donDiTreDaDuyet = (loai === 'VAO' && viPham) ? timDonDaDuyet_(nv.maNV, ngay, 'DI_TRE') : null;
+  var donDiTreDaDuyet = viPham ? timDonDaDuyet_(nv.maNV, ngay, 'DI_TRE') : null;
   if (donDiTreDaDuyet) viPham = false;
   var lanThu = '', tienQuy = 0, ghiChu = [];
-  if (donDiTreDaDuyet) ghiChu.push('Đã có đơn xin đi trễ được duyệt trước, miễn nộp quỹ lần này.');
+  if (donDiTreDaDuyet) ghiChu.push('Đã có đơn xin đi trễ/về sớm được duyệt trước, miễn nộp quỹ lần này.');
   if (viPham) {
     var thang = demViPhamThang_(nv.maNV, Utilities.formatDate(now, TZ, 'yyyy-MM'));
     lanThu  = thang.soLan + 1;

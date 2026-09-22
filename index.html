@@ -161,7 +161,7 @@ textarea{min-height:88px;padding:12px 16px;resize:vertical;line-height:1.4}
 
     <div class="tabs" id="donTabs">
       <button class="tab on" type="button" data-loai="NGHI_PHEP">Nghỉ phép</button>
-      <button class="tab" type="button" data-loai="DI_TRE">Đi trễ</button>
+      <button class="tab" type="button" data-loai="DI_TRE">Đi trễ / Về sớm</button>
       <button class="tab" type="button" data-loai="LAM_BU">Làm bù giờ</button>
     </div>
 
@@ -179,9 +179,14 @@ textarea{min-height:88px;padding:12px 16px;resize:vertical;line-height:1.4}
     </div>
 
     <div id="donFieldsDI_TRE" style="display:none">
-      <label for="donNgayTre">Ngày xin đi trễ</label>
+      <label for="donNgayTre">Ngày áp dụng</label>
       <input type="date" id="donNgayTre">
-      <label for="donGioTre">Giờ dự kiến vào</label>
+      <label for="donKieuTre">Loại</label>
+      <select id="donKieuTre">
+        <option value="tre">Đi trễ (vào muộn)</option>
+        <option value="som">Về sớm (ra sớm)</option>
+      </select>
+      <label for="donGioTre" id="donGioTreLabel">Giờ dự kiến vào</label>
       <input type="time" id="donGioTre">
     </div>
 
@@ -490,6 +495,10 @@ Array.prototype.forEach.call(document.querySelectorAll('#donTabs .tab'), functio
   });
 });
 
+$('donKieuTre').addEventListener('change', function(){
+  $('donGioTreLabel').textContent = (this.value === 'som') ? 'Giờ dự kiến ra' : 'Giờ dự kiến vào';
+});
+
 $('btnGuiDon').addEventListener('click', function(){
   var lyDo = $('donLyDo').value.trim();
   if (!lyDo) { bao($('donErr'), 'Nhập lý do giúp em.'); return; }
@@ -500,9 +509,10 @@ $('btnGuiDon').addEventListener('click', function(){
     if (!tu) { bao($('donErr'), 'Chọn ngày bắt đầu nghỉ.'); return; }
     payload.ngayApDung = tu; payload.ngayApDungKetThuc = den; payload.chiTiet = $('donLoaiNghi').value;
   } else if (S.loaiDon === 'DI_TRE') {
-    var ngayTre = $('donNgayTre').value, gioTre = $('donGioTre').value;
-    if (!ngayTre || !gioTre) { bao($('donErr'), 'Chọn ngày và giờ dự kiến vào.'); return; }
-    payload.ngayApDung = ngayTre; payload.chiTiet = gioTre;
+    var ngayTre = $('donNgayTre').value, gioTre = $('donGioTre').value, kieuTre = $('donKieuTre').value;
+    if (!ngayTre || !gioTre) { bao($('donErr'), 'Chọn ngày và giờ dự kiến.'); return; }
+    payload.ngayApDung = ngayTre;
+    payload.chiTiet = (kieuTre === 'som' ? 'Về sớm lúc ' : 'Vào lúc ') + gioTre;
   } else {
     var ngayBu = $('donNgayBu').value, soLuong = $('donSoLuongBu').value.trim();
     if (!ngayBu || !soLuong) { bao($('donErr'), 'Chọn ngày và ghi số giờ dự kiến làm bù.'); return; }
