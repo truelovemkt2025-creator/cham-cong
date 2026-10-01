@@ -682,13 +682,17 @@ function demViPhamThang_(maNV, thangNam) {
  * âm = làm THIẾU (nợ giờ, cần làm bù), dương = làm DƯ (trả bớt nợ), 0 = vừa đủ.
  * Nhờ tính theo tổng giờ cả ngày thay vì cộng riêng "trễ vào" + "sớm ra", ai
  * vào trễ nhưng chủ động ở lại bù ngay trong ngày thì không bị ghi nợ nữa.
+ *
+ * Chủ Nhật KHÔNG có "ca chuẩn 8 tiếng" — hễ đi làm Chủ Nhật là làm thêm tự
+ * nguyện để bù giờ, nên toàn bộ số phút làm được tính THẲNG là giờ dư (không
+ * trừ 480), thay vì bị tính "thiếu" oan như ngày thường.
  */
-function tinhChenhLechGio_(vaoPhut, raPhut, ca, c) {
+function tinhChenhLechGio_(vaoPhut, raPhut, ca, c, laChuNhat) {
   var nghiVao = phutTuChuoi_(ca === 'sang' ? c.ca_sang_nghi_vao : c.ca_chieu_nghi_vao);
   var nghiRa  = phutTuChuoi_(ca === 'sang' ? c.ca_sang_nghi_ra  : c.ca_chieu_nghi_ra);
   var phutNghi = (vaoPhut <= nghiVao && raPhut >= nghiRa) ? Math.max(0, nghiRa - nghiVao) : 0;
   var gioLamThucTe = Math.max(0, raPhut - vaoPhut) - phutNghi;
-  return gioLamThucTe - 480;
+  return laChuNhat ? gioLamThucTe : (gioLamThucTe - 480);
 }
 
 /** Tổng chênh lệch giờ (phút) cộng dồn trong tháng, từ các lượt CHẤM RA */
@@ -932,8 +936,10 @@ function cham_(req) {
   var chenhLechPhut = '';
   if (loai === 'RA' && homNay.vao) {
     var vaoPhut = phutTuChuoi_(homNay.vao.gio);
-    chenhLechPhut = tinhChenhLechGio_(vaoPhut, phutHienTai, ca, c);
-    if (chenhLechPhut < 0) {
+    chenhLechPhut = tinhChenhLechGio_(vaoPhut, phutHienTai, ca, c, laChuNhat);
+    if (laChuNhat) {
+      ghiChu.push('Chủ nhật: ' + dur_(chenhLechPhut) + ' làm được tính thẳng là giờ dư để bù.');
+    } else if (chenhLechPhut < 0) {
       ghiChu.push('Hôm nay làm thiếu ' + dur_(-chenhLechPhut) + ' so với 8 tiếng chuẩn, cần làm bù trong tháng.');
     } else if (chenhLechPhut > 0) {
       ghiChu.push('Hôm nay làm dư ' + dur_(chenhLechPhut) + ', đã trừ bớt nợ giờ làm bù nếu có.');
