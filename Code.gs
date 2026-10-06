@@ -340,7 +340,10 @@ function guiDon_(req) {
   }
 
   // Kinh Doanh (Telecell) do chị Ngọc duyệt; mọi phòng ban khác do sếp Liên duyệt.
-  var emailDuyet = (nv.phongBan === 'Kinh Doanh') ? c.email_truong_bo_phan : c.email_truong_bo_phan_khac;
+  // Nếu chính người gửi đơn là email được cấu hình để duyệt (vd. chị Ngọc tự xin nghỉ) thì không thể tự duyệt đơn của mình —
+  // chuyển sang cho sếp Liên (email_truong_bo_phan_khac) duyệt thay.
+  var emailDuyet = (nv.phongBan === 'Kinh Doanh' && nv.email !== c.email_truong_bo_phan)
+    ? c.email_truong_bo_phan : c.email_truong_bo_phan_khac;
   if (emailDuyet) {
     try { guiEmailDuyetDon_(maDon, nv, loaiDon, ngayApDung, ngayKetThuc, chiTiet, lyDo, emailDuyet); }
     catch (err) { /* gửi mail lỗi không chặn việc lưu đơn — sếp vẫn thấy đơn trong Sheet */ }
