@@ -6,6 +6,35 @@
  * ============================================================================
  */
 
+/** Liệt kê vai trò hiện tại của cả công ty — để soát lại ai đang có quyền gì */
+function xemVaiTroCaCongTy() {
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NHANSU);
+  if (!sh || sh.getLastRow() < 2) return bao_('Tab NHANSU chua co du lieu.');
+
+  var m = mapCot_(sh);
+  var v = sh.getRange(2, 1, sh.getLastRow() - 1, sh.getLastColumn()).getValues();
+  var nhom = { ADMIN: [], HR: [], TRUONG_BP: [], NV: [] };
+
+  for (var i = 0; i < v.length; i++) {
+    var ma = String(v[i][m['MaNV']] || '').trim();
+    if (!ma) continue;
+    var vt = String(v[i][m['VaiTro']] || '').trim().toUpperCase();
+    if (HR_VAI_TRO.indexOf(vt) < 0) vt = 'NV';
+    var tt = String(v[i][m['TrangThai']] || 'DANG_LAM').trim();
+    nhom[vt].push(ma + ' - ' + String(v[i][m['HoTen']] || '').trim()
+                  + (tt !== 'DANG_LAM' ? ' [' + tt + ']' : ''));
+  }
+
+  var t = 'VAI TRO TRONG PHAN HE NHAN SU\n';
+  for (var k in nhom) {
+    t += '\n' + k + ' (' + nhom[k].length + '):\n'
+       + (nhom[k].length ? '  ' + nhom[k].join('\n  ') : '  (khong co ai)') + '\n';
+  }
+  t += '\nLuu y: chi ADMIN moi chot duoc ky luong va mo lai ky da chot.';
+  return bao_(t);
+}
+
+
 /*================= ĐẶT VAI TRÒ CHO NHÂN VIÊN =================*/
 /**
  * Cách dùng: sửa các dòng ngay dưới đây rồi bấm Run (chọn hàm datVaiTroNhanVien).
@@ -92,34 +121,6 @@ function datVaiTroNhanVien() {
   return bao_('Khong tim thay nhan vien co ma ' + maNV + ' trong tab NHANSU.\n\n'
             + 'Cac ma dang co (' + dsMa.length + '):\n' + dsMa.join(', ') + '\n\n'
             + 'Muon tao moi thi dat DAT_VAI_TRO_TAO_NEU_CHUA_CO = true va dien ho ten.');
-}
-
-/** Liệt kê vai trò hiện tại của cả công ty — để soát lại ai đang có quyền gì */
-function xemVaiTroCaCongTy() {
-  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NHANSU);
-  if (!sh || sh.getLastRow() < 2) return bao_('Tab NHANSU chua co du lieu.');
-
-  var m = mapCot_(sh);
-  var v = sh.getRange(2, 1, sh.getLastRow() - 1, sh.getLastColumn()).getValues();
-  var nhom = { ADMIN: [], HR: [], TRUONG_BP: [], NV: [] };
-
-  for (var i = 0; i < v.length; i++) {
-    var ma = String(v[i][m['MaNV']] || '').trim();
-    if (!ma) continue;
-    var vt = String(v[i][m['VaiTro']] || '').trim().toUpperCase();
-    if (HR_VAI_TRO.indexOf(vt) < 0) vt = 'NV';
-    var tt = String(v[i][m['TrangThai']] || 'DANG_LAM').trim();
-    nhom[vt].push(ma + ' - ' + String(v[i][m['HoTen']] || '').trim()
-                  + (tt !== 'DANG_LAM' ? ' [' + tt + ']' : ''));
-  }
-
-  var t = 'VAI TRO TRONG PHAN HE NHAN SU\n';
-  for (var k in nhom) {
-    t += '\n' + k + ' (' + nhom[k].length + '):\n'
-       + (nhom[k].length ? '  ' + nhom[k].join('\n  ') : '  (khong co ai)') + '\n';
-  }
-  t += '\nLuu y: chi ADMIN moi chot duoc ky luong va mo lai ky da chot.';
-  return bao_(t);
 }
 
 /*================= TIỆN ÍCH NHỎ =================*/
