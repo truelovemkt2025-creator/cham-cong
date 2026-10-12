@@ -90,6 +90,8 @@ function onOpen() {
     .addItem('6. Gửi nhắc chưa chấm công ngay (thử tay)', 'guiNhacThuCong')
     .addItem('7. Bật tự động nhắc chưa chấm công mỗi ngày', 'batTuDongNhacChuaChamCong')
     .addSeparator()
+    .addItem('8. Bật tự động tạo nhân sự mới từ Form', 'batTuDongTaoNhanSuMoi')
+    .addSeparator()
     .addItem('Kiểm tra cấu hình', 'kiemTraCauHinh')
     .addToUi();
 }
@@ -474,6 +476,133 @@ function themNhanVienMau() {
   );
 }
 
+/*================= TẠO NHÂN SỰ MỚI TỰ ĐỘNG TỪ GOOGLE FORM (06/10/2026) =================*/
+/**
+ * Chị Ngọc (hoặc ai onboard nhân sự mới) điền Google Form "Đăng ký nhân sự mới".
+ * Mỗi lần có người nộp form, hàm này tự chạy (trigger onFormSubmit), tự sinh
+ * Mã NV kế tiếp, thêm dòng vào NHANSU (PIN mặc định 1234), rồi gửi email xác
+ * nhận cho sếp Liên — KHÔNG cần ai vào Sheet gõ tay hay nhờ Claude nữa.
+ */
+var SHEET_FORM_NHANSU_MOI = 'Form Responses 1';
+
+function xuLyNhanSuMoiTuForm_(e) {
+  try {
+    var v = e && e.values;
+    if (!v) return;
+    var hoTen = String(v[1] || '').trim();
+    var email = String(v[2] || '').trim();
+    var sdt   = String(v[3] || '').trim();
+    var ngayNhanViec = v[4];
+    ngayNhanViec = (ngayNhanViec instanceof Date) ? Utilities.formatDate(ngayNhanViec, TZ, 'dd/MM/yyyy') : String(ngayNhanViec || '').trim();
+    var phongBan = String(v[5] || '').trim();
+    var ghiChuThem = String(v[6] || '').trim();
+
+    if (!hoTen || !email) {
+      guiEmailLoiTaoNhanSu_('Thiếu Họ tên hoặc Email trong đơn đăng ký — chưa tạo tài khoản.', v);
+      return;
+    }
+
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sh = ss.getSheetByName(SHEET_NHANSU);
+    if (!sh) { guiEmailLoiTaoNhanSu_('Không tìm thấy tab NHANSU.', v); return; }
+
+    var lock = LockService.getScriptLock();
+    lock.waitLock(15000);
+    try {
+      var last = sh.getLastRow();
+      if (last >= 2) {
+        var vNV = sh.getRange(2, 1, last - 1, COT_NHANSU.length).getValues();
+        for (var i = 0; i < vNV.length; i++) {
+          if (String(vNV[i][5]).trim().toLowerCase() === email.toLowerCase()) {
+            guiEmailLoiTaoNhanSu_('Email ' + email + ' đã có tài khoản (Mã NV ' + vNV[i][0] + ' — ' + vNV[i][1] + '). Chưa tạo thêm, kiểm tra lại giúp.', v);
+            return;
+          }
+        }
+      }
+
+      var maNVMoi = maNVKeTiep_(sh);
+      var ghiChu = 'Nhan viec ngay ' + ngayNhanViec + (sdt ? '. SDT: ' + sdt : '') + (ghiChuThem ? '. ' + ghiChuThem : '') + ' (tu dong tao tu Form)';
+      sh.appendRow([maNVMoi, hoTen, 'auto', '1234', '', email, 'DANG_LAM', '', ghiChu, phongBan]);
+      SpreadsheetApp.flush();
+
+      guiEmailXacNhanNhanSuMoi_(maNVMoi, hoTen, email, sdt, ngayNhanViec, phongBan);
+    } finally {
+      try { lock.releaseLock(); } catch (e2) {}
+    }
+  } catch (err) {
+    try { guiEmailLoiTaoNhanSu_('Lỗi khi tự tạo tài khoản: ' + err, e && e.values); } catch (e3) {}
+  }
+}
+
+function maNVKeTiep_(shNhanSu) {
+  var last = shNhanSu.getLastRow();
+  var max = 0;
+  if (last >= 2) {
+    var maNVs = shNhanSu.getRange(2, 1, last - 1, 1).getValues();
+    maNVs.forEach(function(r) {
+      var m = String(r[0]).trim().match(/^LJN(\d+)$/i);
+      if (m) max = Math.max(max, parseInt(m[1], 10));
+    });
+  }
+  var soChuoi = String(max + 1);
+  while (soChuoi.length < 5) soChuoi = '0' + soChuoi;
+  return 'LJN' + soChuoi;
+}
+
+function guiEmailXacNhanNhanSuMoi_(maNV, hoTen, email, sdt, ngayNhanViec, phongBan) {
+  var c = docCauHinh_();
+  var toSep = c.email_truong_bo_phan_khac;
+  if (!toSep) return;
+  var link = c.link_app || 'https://truelovemkt2025-creator.github.io/cham-cong/';
+  var html =
+    '<div style="font-family:Arial,sans-serif;max-width:480px">' +
+    '<h2 style="margin:0 0 12px">✅ Đã tự tạo tài khoản chấm công mới</h2>' +
+    '<p><b>' + hoTen + '</b> (' + phongBan + ') — nhận việc ' + ngayNhanViec + '</p>' +
+    '<table cellpadding="4" cellspacing="0" style="border-collapse:collapse">' +
+    '<tr><td><b>Mã NV</b></td><td>' + maNV + '</td></tr>' +
+    '<tr><td><b>PIN mặc định</b></td><td>1234</td></tr>' +
+    '<tr><td><b>Email</b></td><td>' + email + '</td></tr>' +
+    '<tr><td><b>SĐT</b></td><td>' + (sdt || '—') + '</td></tr>' +
+    '</table>' +
+    '<p style="margin-top:12px">Link app chấm công: <a href="' + link + '">' + link + '</a></p>' +
+    '<p style="color:#888;font-size:12px">Tự động tạo từ Form "Đăng ký nhân sự mới" — không cần ai thao tác thêm trong Sheet.</p>' +
+    '</div>';
+  MailApp.sendEmail({to: toSep, subject: '✅ Nhân sự mới: ' + hoTen + ' (' + maNV + ')', htmlBody: html});
+}
+
+function guiEmailLoiTaoNhanSu_(lyDo, values) {
+  var c = docCauHinh_();
+  var toSep = c.email_truong_bo_phan_khac;
+  if (!toSep) return;
+  MailApp.sendEmail({
+    to: toSep,
+    subject: '⚠️ Form đăng ký nhân sự mới — CẦN TẠO TAY',
+    body: 'Hệ thống KHÔNG tự tạo được tài khoản từ đơn đăng ký nhân sự mới.\n\n' +
+          'Lý do: ' + lyDo + '\n\n' +
+          'Dữ liệu đã gửi: ' + JSON.stringify(values) + '\n\n' +
+          'Vào tab NHANSU thêm tay giúp em, hoặc nhờ Claude Code.'
+  });
+}
+
+function batTuDongTaoNhanSuMoi() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName(SHEET_FORM_NHANSU_MOI);
+  if (!sh) {
+    SpreadsheetApp.getUi().alert('Chưa thấy tab "' + SHEET_FORM_NHANSU_MOI + '" — phải nối Google Form "Đăng ký nhân sự mới" vào Sheet này trước (Form > Responses > Link to Sheets > chọn Sheet này).');
+    return;
+  }
+  var trig = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < trig.length; i++) {
+    if (trig[i].getHandlerFunction() === 'xuLyNhanSuMoiTuForm_') ScriptApp.deleteTrigger(trig[i]);
+  }
+  ScriptApp.newTrigger('xuLyNhanSuMoiTuForm_').forSpreadsheet(ss).onFormSubmit().create();
+  SpreadsheetApp.getUi().alert(
+    'Đã bật tự động tạo nhân sự mới.\n\n' +
+    'Từ giờ ai nộp Form "Đăng ký nhân sự mới" sẽ tự có Mã NV + PIN 1234 trong NHANSU ngay lập tức, ' +
+    'và sếp Liên nhận email xác nhận.'
+  );
+}
+
 function xemLinkWebApp() {
   SpreadsheetApp.getUi().alert(
     'Lấy link ứng dụng web:\n\n' +
@@ -493,6 +622,7 @@ function kiemTraCauHinh() {
   var soNV = sh ? Math.max(0, sh.getLastRow() - 1) : 0;
   var coTrigger = ScriptApp.getProjectTriggers().some(function(t){ return t.getHandlerFunction() === 'chayTuDongDonDep'; });
   var coTriggerNhac = ScriptApp.getProjectTriggers().some(function(t){ return t.getHandlerFunction() === 'chayTuDongNhacChuaChamCong'; });
+  var coTriggerNhanSuMoi = ScriptApp.getProjectTriggers().some(function(t){ return t.getHandlerFunction() === 'xuLyNhanSuMoiTuForm_'; });
   var shDon = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_DONXINPHEP);
   var soDonChoDuyet = 0;
   if (shDon && shDon.getLastRow() >= 2) {
@@ -508,6 +638,7 @@ function kiemTraCauHinh() {
     'Giữ ảnh: ' + (c.giu_anh_ngay || 45) + ' ngày · Tự động dọn ảnh: ' + (coTrigger ? '✅ ĐÃ BẬT' : '⚠️ CHƯA BẬT') + '\n' +
     'Tự động nhắc chưa chấm công (13h, trừ CN): ' + (coTriggerNhac ? '✅ ĐÃ BẬT' : '⚠️ CHƯA BẬT') + '\n' +
     'Email duyệt đơn — Kinh Doanh: ' + (c.email_truong_bo_phan || '(chưa điền)') + ' · Khác: ' + (c.email_truong_bo_phan_khac || '(chưa điền)') + ' · Đơn chờ duyệt: ' + soDonChoDuyet + '\n' +
+    'Tự động tạo nhân sự mới từ Form: ' + (coTriggerNhanSuMoi ? '✅ ĐÃ BẬT' : '⚠️ CHƯA BẬT') + '\n' +
     'Số nhân viên: ' + soNV + '\n\n' +
     (thieu.length ? ('⚠️ CÒN THIẾU:\n· ' + thieu.join('\n· ')) : '✅ Đủ điều kiện chạy.')
   );
