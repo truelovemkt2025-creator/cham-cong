@@ -407,7 +407,8 @@ function xuLyDuyetDon_(maDon, ketQua) {
         sh.getRange(i + 2, 13).setValue(Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd HH:mm:ss'));
         // ngayChuoi_() vì cột NgayApDung có thể đã bị Sheets tự đổi sang kiểu Date dù đã ép '@' —
         // String() thẳng ra sẽ hiện dạng "Thu Sep 17 2026 00:00:00 GMT+0700" rất khó đọc.
-        ketQuaTra = {ok: true, trangThai: trangThaiMoi, loaiDon: String(v[i][5]), hoTen: String(v[i][4]), ngayApDung: ngayChuoi_(v[i][6])};
+        ketQuaTra = {ok: true, trangThai: trangThaiMoi, loaiDon: String(v[i][5]), maNV: String(v[i][3]), hoTen: String(v[i][4]),
+                     ngayApDung: ngayChuoi_(v[i][6]), ngayApDungKetThuc: ngayChuoi_(v[i][7])};
         break;
       }
     }
@@ -415,7 +416,35 @@ function xuLyDuyetDon_(maDon, ketQua) {
   } finally {
     try { lock.releaseLock(); } catch (e2) {}
   }
+  if (ketQuaTra && ketQuaTra.ok) {
+    try { guiEmailKetQuaDonChoNhanVien_(ketQuaTra); } catch (e3) { /* không chặn kết quả duyệt nếu gửi mail lỗi */ }
+  }
   return ketQuaTra || {ok: false, loi: 'Không tìm thấy đơn này — có thể link đã cũ.'};
+}
+
+/** Báo kết quả duyệt/từ chối ngược lại cho chính nhân viên đã gửi đơn — trước đây chỉ trưởng bộ phận
+ *  biết qua email, nhân viên không có cách nào biết đơn đã được xử lý chưa (sếp Liên phát hiện 21/10/2026). */
+function guiEmailKetQuaDonChoNhanVien_(kq) {
+  var nv = timNhanVien_(kq.maNV);
+  if (!nv || !nv.email) return;
+  var duyet = kq.trangThai === 'DA_DUYET';
+  var ngayDong = kq.ngayApDung === kq.ngayApDungKetThuc ? kq.ngayApDung : (kq.ngayApDung + ' → ' + kq.ngayApDungKetThuc);
+  var html =
+    '<div style="font-family:Arial,sans-serif;max-width:480px">' +
+    '<h2 style="margin:0 0 12px;color:' + (duyet ? '#177A4B' : '#B42F2C') + '">' +
+      (duyet ? '✅ Đơn đã được DUYỆT' : '❌ Đơn đã bị TỪ CHỐI') + '</h2>' +
+    '<p>Chào ' + nv.hoTen + ',</p>' +
+    '<p>' + tenLoaiDon_(kq.loaiDon) + ' ngày <b>' + ngayDong + '</b> của bạn ' +
+      (duyet ? 'đã được trưởng bộ phận <b>duyệt</b>.' : 'đã bị trưởng bộ phận <b>từ chối</b>.') + '</p>' +
+    (duyet ? '<p style="color:#888;font-size:13px">Nếu là đơn xin đi trễ/về sớm, nhớ chấm công đúng ngày đó để app tự nhận miễn quỹ.</p>' : '') +
+    (!duyet ? '<p style="color:#888;font-size:13px">Có thắc mắc thì nhắn trực tiếp trưởng bộ phận nhé.</p>' : '') +
+    '</div>';
+  MailApp.sendEmail({
+    to: nv.email,
+    subject: (duyet ? '✅ Đã duyệt: ' : '❌ Từ chối: ') + tenLoaiDon_(kq.loaiDon) + ' (' + ngayDong + ')',
+    htmlBody: html,
+    body: (duyet ? 'Đơn đã được duyệt' : 'Đơn đã bị từ chối') + ' - ' + tenLoaiDon_(kq.loaiDon) + ' ngày ' + ngayDong
+  });
 }
 
 /** Trang HTML nhỏ hiện ra khi bấm nút Duyệt/Từ chối trong email */
